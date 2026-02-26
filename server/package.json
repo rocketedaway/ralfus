@@ -14,7 +14,8 @@
     "@linear/sdk": "^61.0.0",
     "axios": "^1.7.0",
     "dotenv": "^16.4.0",
-    "express": "^4.19.0"
+    "express": "^4.19.0",
+    "p-queue": "^7.4.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
