@@ -63,12 +63,18 @@ export async function runPlanMode(
     let stdout = "";
     let stderr = "";
 
+    console.log(`[cursor] Spawning cursor-agent: ${bin}`);
+
     child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
+      const text = chunk.toString();
+      stdout += text;
+      process.stdout.write(`[cursor:stdout] ${text}`);
     });
 
     child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
+      const text = chunk.toString();
+      stderr += text;
+      process.stdout.write(`[cursor:stderr] ${text}`);
     });
 
     // Write the prompt to stdin and close it so the agent knows input is done
@@ -76,10 +82,17 @@ export async function runPlanMode(
     child.stdin.end();
 
     child.on("close", (code) => {
+      console.log(`[cursor] cursor-agent exited with code ${code}`);
       if (code !== 0) {
+        const detail = [
+          stderr.trim() ? `stderr: ${stderr.trim()}` : "",
+          stdout.trim() ? `stdout: ${stdout.trim()}` : "",
+        ]
+          .filter(Boolean)
+          .join(" | ");
         reject(
           new Error(
-            `cursor-agent exited with code ${code}. stderr: ${stderr.trim() || stdout.trim()}`
+            `cursor-agent exited with code ${code}${detail ? `. ${detail}` : " (no output)"}`
           )
         );
         return;
@@ -93,6 +106,7 @@ export async function runPlanMode(
     });
 
     child.on("error", (err) => {
+      console.error(`[cursor] Failed to spawn cursor-agent: ${err.message}`);
       reject(new Error(`Failed to spawn cursor-agent: ${err.message}`));
     });
   });
