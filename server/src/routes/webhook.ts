@@ -66,7 +66,52 @@ async function handleWebhook(payload: WebhookPayload): Promise<void> {
     return;
   }
 
-  // Add additional event type handlers here as needed
+  if (type === "Issue" && action === "update") {
+    await handleIssueUpdate(payload);
+    return;
+  }
+}
+
+type IssueUpdatePayload = WebhookPayload & {
+  data: {
+    id: string;
+    title: string;
+    description?: string;
+    assigneeId?: string;
+  };
+  updatedFrom: {
+    assigneeId?: string;
+  };
+};
+
+async function handleIssueUpdate(payload: WebhookPayload): Promise<void> {
+  const { data, updatedFrom } = payload as IssueUpdatePayload;
+
+  const assigneeChanged = updatedFrom?.assigneeId !== data?.assigneeId && data?.assigneeId;
+  if (!assigneeChanged) return;
+
+  const accessToken = await getAccessToken(payload.organizationId);
+  if (!accessToken) {
+    console.error(`No access token found for organization ${payload.organizationId}`);
+    return;
+  }
+
+  const linear = new LinearClient({ accessToken });
+  const viewer = await linear.viewer;
+
+  if (data.assigneeId !== viewer.id) return;
+
+  console.log(`Agent assigned to issue: ${data.id} — "${data.title}"`);
+
+  await linear.createComment({
+    issueId: data.id,
+    body: "🌵🏄 Gnarly wave, dude — I'm dropping in on this one. Give me a sec to wax the board and I'll be shredding through it shortly. Cowabunga!",
+  });
+
+  // TODO: Kick off your agent loop here.
+  // data.id          — issue ID
+  // data.title       — issue title
+  // data.description — issue description (if set)
 }
 
 async function handleAgentSession(payload: WebhookPayload): Promise<void> {
