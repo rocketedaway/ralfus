@@ -12,6 +12,18 @@ function getWorkDir(): string {
 function getRepoUrl(): string {
   const url = process.env.GITHUB_REPO_URL;
   if (!url) throw new Error("GITHUB_REPO_URL env var is not set");
+  return toHttpsUrl(url);
+}
+
+/**
+ * Converts an SSH GitHub URL (git@github.com:owner/repo.git) to HTTPS format.
+ * HTTPS URLs are returned unchanged.
+ */
+function toHttpsUrl(url: string): string {
+  const sshMatch = url.match(/^git@github\.com:(.+)$/);
+  if (sshMatch) {
+    return `https://github.com/${sshMatch[1]}`;
+  }
   return url;
 }
 
