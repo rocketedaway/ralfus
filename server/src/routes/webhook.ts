@@ -152,6 +152,16 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
 
     console.log("Agent session created:", agentSession.id);
     console.log("Prompt context:", agentSession.promptContext);
+
+    if (agentSession.issue?.id) {
+      getQueue().add(async () => {
+        try {
+          await runInitialPlanningJob(agentSession.issue!.id, payload.organizationId, accessToken);
+        } catch (err) {
+          console.error(`[queue] Initial planning job failed for issue ${agentSession.issue!.id}:`, err);
+        }
+      });
+    }
   } else if (action === "prompted") {
     const userMessage = payload.agentActivity?.body ?? "";
     const issueId = agentSession.issue?.id;
