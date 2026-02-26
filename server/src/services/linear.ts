@@ -54,6 +54,17 @@ export async function postComment(
   await linear.createComment({ issueId, body });
 }
 
+export async function postAgentActivity(
+  linear: LinearClient,
+  agentSessionId: string,
+  body: string
+): Promise<void> {
+  await linear.createAgentActivity({
+    agentSessionId,
+    content: { type: "response", body },
+  });
+}
+
 export async function updateIssueStatus(
   linear: LinearClient,
   issueId: string,
