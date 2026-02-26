@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import crypto from "crypto";
 import { LinearClient } from "@linear/sdk";
-import { getAccessToken } from "../db";
+import { getAccessToken, upsertIssue } from "../db";
 import { getQueue } from "../jobs/queue";
 import { runInitialPlanningJob, runClarificationJob } from "../jobs/planningJob";
 
@@ -105,11 +105,6 @@ async function handleIssueUpdate(payload: WebhookPayload): Promise<void> {
 
   console.log(`Agent assigned to issue: ${data.id} — "${data.title}"`);
 
-  await linear.createComment({
-    issueId: data.id,
-    body: "🌵🏄 Gnarly wave, dude — I'm dropping in on this one. Give me a sec to wax the board and I'll be shredding through it shortly. Cowabunga!",
-  });
-
   // Enqueue the initial planning job
   getQueue().add(async () => {
     try {
@@ -154,6 +149,9 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
     console.log("Prompt context:", agentSession.promptContext);
 
     if (agentSession.issue?.id) {
+      // Persist the agentSessionId so planning jobs can post back to this thread
+      await upsertIssue(agentSession.issue.id, payload.organizationId, "planning", null, agentSession.id);
+
       getQueue().add(async () => {
         try {
           await runInitialPlanningJob(agentSession.issue!.id, payload.organizationId, accessToken);
@@ -176,11 +174,10 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
       },
     });
 
-    // If this session is tied to an issue, enqueue a clarification job
     if (issueId) {
       getQueue().add(async () => {
         try {
-          await runClarificationJob(issueId, payload.organizationId, accessToken);
+          await runClarificationJob(issueId, payload.organizationId, accessToken, userMessage);
         } catch (err) {
           console.error(`[queue] Clarification job failed for issue ${issueId}:`, err);
         }

@@ -2,7 +2,7 @@ import { LinearClient } from "@linear/sdk";
 import { getIssue, upsertIssue } from "../db";
 import {
   fetchIssueWithComments,
-  postComment,
+  postAgentActivity,
   updateIssueStatus,
   IssueComment,
 } from "../services/linear";
@@ -52,13 +52,14 @@ function isApproval(text: string): boolean {
 
 async function postPlanAndAwaitApproval(
   linear: LinearClient,
+  agentSessionId: string,
   issueId: string,
   organizationId: string,
   planText: string,
   repoPath: string
 ): Promise<void> {
   const body = `## Implementation Plan\n\n${planText}\n\n---\n_Reply **approved** to start work, or share any feedback and I'll update the plan._`;
-  await postComment(linear, issueId, body);
+  await postAgentActivity(linear, agentSessionId, body);
   await upsertIssue(issueId, organizationId, "awaiting_approval", repoPath);
 }
 
@@ -76,15 +77,21 @@ export async function runInitialPlanningJob(
   const linear = new LinearClient({ accessToken });
 
   // Bail out if we've already processed this assignment (idempotency)
-  const existing = await getIssue(issueId);
-  if (existing && existing.state !== "planning") {
+  // agentSessionId was stored by the webhook handler before this job was enqueued
+  const record = await getIssue(issueId);
+  if (record && record.state !== "planning") {
     console.log(
-      `[planningJob] Issue ${issueId} already in state "${existing.state}", skipping initial planning`
+      `[planningJob] Issue ${issueId} already in state "${record.state}", skipping initial planning`
     );
     return;
   }
 
-  await upsertIssue(issueId, organizationId, "planning");
+  const agentSessionId = record?.agentSessionId ?? null;
+
+  if (!agentSessionId) {
+    console.error(`[planningJob] No agentSessionId for issue ${issueId} — cannot post to agent thread`);
+    return;
+  }
 
   // 1. Fetch full issue details from Linear
   const issue = await fetchIssueWithComments(linear, issueId);
@@ -95,9 +102,9 @@ export async function runInitialPlanningJob(
     repoPath = await ensureRepoCheckedOut(issueId);
   } catch (err) {
     console.error(`[planningJob] Failed to checkout repo: ${err}`);
-    await postComment(
+    await postAgentActivity(
       linear,
-      issueId,
+      agentSessionId,
       `⚠️ I was unable to check out the repository. Please ensure \`GITHUB_REPO_URL\` and \`GITHUB_TOKEN\` are configured correctly.\n\n\`\`\`\n${err}\n\`\`\``
     );
     return;
@@ -113,22 +120,22 @@ export async function runInitialPlanningJob(
     planResult = await runPlanMode(prompt, repoPath);
   } catch (err) {
     console.error(`[planningJob] Cursor CLI failed: ${err}`);
-    await postComment(
+    await postAgentActivity(
       linear,
-      issueId,
+      agentSessionId,
       `⚠️ I encountered an error while generating the plan. Please check the server logs.\n\n\`\`\`\n${err}\n\`\`\``
     );
     return;
   }
 
-  // 4. Post the plan to Linear and always wait for user confirmation
+  // 4. Post the plan and always wait for user confirmation
   if (planResult.needsClarification) {
     const body = `## Implementation Plan (Draft)\n\nI've started thinking through this ticket, but I have a few questions before I can finalize the plan.\n\n${planResult.raw}\n\n---\n_Please reply with your answers and I'll update the plan._`;
-    await postComment(linear, issueId, body);
+    await postAgentActivity(linear, agentSessionId, body);
     await upsertIssue(issueId, organizationId, "awaiting_clarification", repoPath);
     console.log(`[planningJob] Plan posted with clarifying questions for issue ${issueId}`);
   } else {
-    await postPlanAndAwaitApproval(linear, issueId, organizationId, planResult.raw, repoPath);
+    await postPlanAndAwaitApproval(linear, agentSessionId, issueId, organizationId, planResult.raw, repoPath);
     console.log(`[planningJob] Plan posted for approval for issue ${issueId}`);
   }
 }
@@ -140,7 +147,8 @@ export async function runInitialPlanningJob(
 export async function runClarificationJob(
   issueId: string,
   organizationId: string,
-  accessToken: string
+  accessToken: string,
+  userMessage?: string
 ): Promise<void> {
   console.log(`[planningJob] Processing clarification for issue ${issueId}`);
 
@@ -161,16 +169,22 @@ export async function runClarificationJob(
     return;
   }
 
+  const agentSessionId = record.agentSessionId;
+  if (!agentSessionId) {
+    console.error(`[planningJob] No agentSessionId for issue ${issueId} — cannot post to agent thread`);
+    return;
+  }
+
   // 1. Fetch updated issue + full comment thread from Linear
   const issue = await fetchIssueWithComments(linear, issueId);
 
   const repoPath = record.repoPath ?? (await ensureRepoCheckedOut(issueId));
 
-  // 2. If awaiting approval, check if the latest comment is an approval
+  // 2. If awaiting approval, check if the incoming message is an approval
   if (record.state === "awaiting_approval") {
-    const latestComment = issue.comments[issue.comments.length - 1];
-    if (latestComment && isApproval(latestComment.body)) {
-      await postComment(linear, issueId, `✅ Plan approved — starting work now!`);
+    const messageToCheck = userMessage ?? issue.comments[issue.comments.length - 1]?.body ?? "";
+    if (isApproval(messageToCheck)) {
+      await postAgentActivity(linear, agentSessionId, `✅ Plan approved — starting work now!`);
       await updateIssueStatus(linear, issueId, organizationId, "In Progress");
       await upsertIssue(issueId, organizationId, "in_progress", repoPath);
       console.log(`[planningJob] Issue ${issueId} approved and now In Progress`);
@@ -181,11 +195,17 @@ export async function runClarificationJob(
 
   await upsertIssue(issueId, organizationId, "awaiting_clarification", repoPath);
 
+  // Build context: use the userMessage from the webhook if available,
+  // otherwise fall back to the issue comment thread
+  const contextComments: IssueComment[] = userMessage
+    ? [...issue.comments, { id: "latest", body: userMessage, createdAt: new Date(), userId: null }]
+    : issue.comments;
+
   // 3. Re-run Cursor with the full conversation context
   const prompt = buildClarificationPrompt(
     issue.title,
     issue.description,
-    issue.comments
+    contextComments
   );
 
   let planResult;
@@ -193,9 +213,9 @@ export async function runClarificationJob(
     planResult = await runPlanMode(prompt, repoPath);
   } catch (err) {
     console.error(`[planningJob] Cursor CLI failed on clarification: ${err}`);
-    await postComment(
+    await postAgentActivity(
       linear,
-      issueId,
+      agentSessionId,
       `⚠️ I encountered an error while updating the plan. Please check the server logs.\n\n\`\`\`\n${err}\n\`\`\``
     );
     return;
@@ -204,11 +224,11 @@ export async function runClarificationJob(
   // 4. Post updated plan — always require approval again
   if (planResult.needsClarification) {
     const body = `## Updated Implementation Plan\n\nThank you for the details! I still have a couple of follow-up questions:\n\n${planResult.raw}\n\n---\n_Please reply and I'll finalize the plan._`;
-    await postComment(linear, issueId, body);
+    await postAgentActivity(linear, agentSessionId, body);
     await upsertIssue(issueId, organizationId, "awaiting_clarification", repoPath);
     console.log(`[planningJob] Updated plan with remaining questions for issue ${issueId}`);
   } else {
-    await postPlanAndAwaitApproval(linear, issueId, organizationId, planResult.raw, repoPath);
+    await postPlanAndAwaitApproval(linear, agentSessionId, issueId, organizationId, planResult.raw, repoPath);
     console.log(`[planningJob] Updated plan posted for approval for issue ${issueId}`);
   }
 }
