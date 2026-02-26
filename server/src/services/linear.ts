@@ -13,6 +13,9 @@ export type IssueDetails = {
   description: string | null;
   statusName: string | null;
   statusId: string | null;
+  identifier: string;
+  url: string;
+  creatorName: string | null;
   comments: IssueComment[];
 };
 
@@ -35,6 +38,7 @@ export async function fetchIssueWithComments(
   }));
 
   const state = await issue.state;
+  const creator = await issue.creator;
 
   return {
     id: issue.id,
@@ -42,6 +46,9 @@ export async function fetchIssueWithComments(
     description: issue.description ?? null,
     statusName: state?.name ?? null,
     statusId: state?.id ?? null,
+    identifier: issue.identifier,
+    url: issue.url,
+    creatorName: creator?.name ?? null,
     comments,
   };
 }
@@ -52,6 +59,43 @@ export async function postComment(
   body: string
 ): Promise<void> {
   await linear.createComment({ issueId, body });
+}
+
+/**
+ * Posts the finalized plan as a comment on the Linear ticket.
+ * Returns the created comment's ID so it can be stored in the DB.
+ */
+export async function postPlanComment(
+  linear: LinearClient,
+  issueId: string,
+  body: string
+): Promise<string> {
+  const result = await linear.createComment({ issueId, body });
+  const comment = await result.comment;
+  if (!comment) throw new Error("Failed to create plan comment — no comment returned");
+  return comment.id;
+}
+
+/**
+ * Updates the body of an existing Linear comment (used to check off plan steps).
+ */
+export async function updateComment(
+  linear: LinearClient,
+  commentId: string,
+  body: string
+): Promise<void> {
+  await linear.updateComment(commentId, { body });
+}
+
+/**
+ * Fetches a Linear comment's body by its ID.
+ */
+export async function fetchComment(
+  linear: LinearClient,
+  commentId: string
+): Promise<string> {
+  const comment = await linear.comment({ id: commentId });
+  return comment.body;
 }
 
 export async function postAgentActivity(
