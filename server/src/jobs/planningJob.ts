@@ -41,6 +41,28 @@ function buildClarificationPrompt(
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function isApproval(text: string): boolean {
+  return /\b(approved?|lgtm|looks?\s*good|go\s*ahead|proceed|start(\s+work)?|yes|ok(ay)?|confirm(ed)?|ship\s*it|sounds?\s*good)\b/i.test(
+    text.trim()
+  );
+}
+
+async function postPlanAndAwaitApproval(
+  linear: LinearClient,
+  issueId: string,
+  organizationId: string,
+  planText: string,
+  repoPath: string
+): Promise<void> {
+  const body = `## Implementation Plan\n\n${planText}\n\n---\n_Reply **approved** to start work, or share any feedback and I'll update the plan._`;
+  await postComment(linear, issueId, body);
+  await upsertIssue(issueId, organizationId, "awaiting_approval", repoPath);
+}
+
+// ---------------------------------------------------------------------------
 // Job: initial planning when an issue is first assigned
 // ---------------------------------------------------------------------------
 
@@ -99,16 +121,15 @@ export async function runInitialPlanningJob(
     return;
   }
 
-  // 4. Post the plan to Linear
+  // 4. Post the plan to Linear and always wait for user confirmation
   if (planResult.needsClarification) {
     const body = `## Implementation Plan (Draft)\n\nI've started thinking through this ticket, but I have a few questions before I can finalize the plan.\n\n${planResult.raw}\n\n---\n_Please reply with your answers and I'll update the plan._`;
     await postComment(linear, issueId, body);
     await upsertIssue(issueId, organizationId, "awaiting_clarification", repoPath);
-    console.log(
-      `[planningJob] Plan posted with clarifying questions for issue ${issueId}`
-    );
+    console.log(`[planningJob] Plan posted with clarifying questions for issue ${issueId}`);
   } else {
-    await confirmAndStartWork(linear, issueId, organizationId, planResult.raw, repoPath);
+    await postPlanAndAwaitApproval(linear, issueId, organizationId, planResult.raw, repoPath);
+    console.log(`[planningJob] Plan posted for approval for issue ${issueId}`);
   }
 }
 
@@ -133,9 +154,9 @@ export async function runClarificationJob(
     return;
   }
 
-  if (record.state !== "awaiting_clarification") {
+  if (record.state !== "awaiting_clarification" && record.state !== "awaiting_approval") {
     console.log(
-      `[planningJob] Issue ${issueId} is in state "${record.state}", not awaiting clarification — ignoring`
+      `[planningJob] Issue ${issueId} is in state "${record.state}", not awaiting input — ignoring`
     );
     return;
   }
@@ -144,9 +165,23 @@ export async function runClarificationJob(
   const issue = await fetchIssueWithComments(linear, issueId);
 
   const repoPath = record.repoPath ?? (await ensureRepoCheckedOut(issueId));
+
+  // 2. If awaiting approval, check if the latest comment is an approval
+  if (record.state === "awaiting_approval") {
+    const latestComment = issue.comments[issue.comments.length - 1];
+    if (latestComment && isApproval(latestComment.body)) {
+      await postComment(linear, issueId, `✅ Plan approved — starting work now!`);
+      await updateIssueStatus(linear, issueId, organizationId, "In Progress");
+      await upsertIssue(issueId, organizationId, "in_progress", repoPath);
+      console.log(`[planningJob] Issue ${issueId} approved and now In Progress`);
+      return;
+    }
+    // Not an approval — treat as feedback and re-run the agent
+  }
+
   await upsertIssue(issueId, organizationId, "awaiting_clarification", repoPath);
 
-  // 2. Re-run Cursor with the full conversation context
+  // 3. Re-run Cursor with the full conversation context
   const prompt = buildClarificationPrompt(
     issue.title,
     issue.description,
@@ -166,43 +201,15 @@ export async function runClarificationJob(
     return;
   }
 
-  // 3. Post updated plan or confirm
+  // 4. Post updated plan — always require approval again
   if (planResult.needsClarification) {
     const body = `## Updated Implementation Plan\n\nThank you for the details! I still have a couple of follow-up questions:\n\n${planResult.raw}\n\n---\n_Please reply and I'll finalize the plan._`;
     await postComment(linear, issueId, body);
-    console.log(
-      `[planningJob] Updated plan with remaining questions for issue ${issueId}`
-    );
+    await upsertIssue(issueId, organizationId, "awaiting_clarification", repoPath);
+    console.log(`[planningJob] Updated plan with remaining questions for issue ${issueId}`);
   } else {
-    await confirmAndStartWork(linear, issueId, organizationId, planResult.raw, repoPath);
+    await postPlanAndAwaitApproval(linear, issueId, organizationId, planResult.raw, repoPath);
+    console.log(`[planningJob] Updated plan posted for approval for issue ${issueId}`);
   }
 }
 
-// ---------------------------------------------------------------------------
-// Shared helper: post the confirmed plan, start work, update status
-// ---------------------------------------------------------------------------
-
-async function confirmAndStartWork(
-  linear: LinearClient,
-  issueId: string,
-  organizationId: string,
-  planText: string,
-  repoPath: string
-): Promise<void> {
-  // Post the finalized plan
-  const planBody = `## Implementation Plan\n\n${planText}`;
-  await postComment(linear, issueId, planBody);
-
-  // Announce that work is starting
-  await postComment(
-    linear,
-    issueId,
-    `✅ The plan looks solid — I'm starting work on this now.`
-  );
-
-  // Move the ticket to In Progress
-  await updateIssueStatus(linear, issueId, organizationId, "In Progress");
-
-  await upsertIssue(issueId, organizationId, "in_progress", repoPath);
-  console.log(`[planningJob] Issue ${issueId} is now In Progress`);
-}
