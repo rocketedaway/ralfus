@@ -16,6 +16,16 @@ function getRepoUrl(): string {
 }
 
 /**
+ * Returns the HTTPS web URL for the configured repo (without .git suffix).
+ * e.g. https://github.com/owner/repo
+ */
+export function getRepoWebUrl(): string {
+  const url = process.env.GITHUB_REPO_URL;
+  if (!url) throw new Error("GITHUB_REPO_URL env var is not set");
+  return toHttpsUrl(url).replace(/\.git$/, "");
+}
+
+/**
  * Converts an SSH GitHub URL (git@github.com:owner/repo.git) to HTTPS format.
  * HTTPS URLs are returned unchanged.
  */
@@ -63,6 +73,47 @@ export async function ensureRepoCheckedOut(issueId: string): Promise<string> {
 
   console.log(`Repo cloned to ${repoPath}`);
   return repoPath;
+}
+
+/**
+ * Creates a new git branch and pushes it to origin.
+ */
+export async function createBranch(repoPath: string, branchName: string): Promise<void> {
+  const env = getGhEnv();
+  await execFileAsync("git", ["-C", repoPath, "checkout", "-b", branchName], { env });
+  await execFileAsync("git", ["-C", repoPath, "push", "-u", "origin", branchName], { env });
+  console.log(`Branch "${branchName}" created and pushed`);
+}
+
+/**
+ * Stages all changes, commits with the given message, and pushes to origin.
+ * Throws if there are no changes to commit.
+ */
+export async function commitAndPush(repoPath: string, message: string): Promise<void> {
+  const env = getGhEnv();
+  await execFileAsync("git", ["-C", repoPath, "add", "-A"], { env });
+  await execFileAsync("git", ["-C", repoPath, "commit", "-m", message], { env });
+  await execFileAsync("git", ["-C", repoPath, "push"], { env });
+  console.log(`Committed and pushed: "${message}"`);
+}
+
+/**
+ * Creates a pull request using the GitHub CLI and returns the PR URL.
+ */
+export async function createPullRequest(
+  repoPath: string,
+  title: string,
+  body: string
+): Promise<string> {
+  const env = getGhEnv();
+  const { stdout } = await execFileAsync(
+    "gh",
+    ["pr", "create", "--title", title, "--body", body],
+    { cwd: repoPath, env }
+  );
+  const prUrl = stdout.trim();
+  console.log(`Pull request created: ${prUrl}`);
+  return prUrl;
 }
 
 /**
