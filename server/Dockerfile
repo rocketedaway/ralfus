@@ -17,6 +17,14 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# git is needed for repo operations; gh CLI for cloning via GitHub token auth
+# curl + bash are needed to install the Cursor Agent CLI
+RUN apk add --no-cache git github-cli curl bash
+
+# Install Cursor Agent CLI
+RUN curl -fsSL https://cursor.com/install | bash
+ENV PATH="/root/.local/bin:${PATH}"
+
 COPY package*.json ./
 RUN npm ci --omit=dev
 
