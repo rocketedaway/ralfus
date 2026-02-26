@@ -8,6 +8,10 @@ primary_region = 'yyz'
 
 [build]
 
+[deploy]
+  release_timeout = 180
+  wait_timeout = 180
+
 [http_service]
   internal_port = 3000
   force_https = true
