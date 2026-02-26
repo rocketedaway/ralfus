@@ -67,9 +67,19 @@ export async function ensureRepoCheckedOut(issueId: string): Promise<string> {
 
   if (fs.existsSync(path.join(repoPath, ".git"))) {
     console.log(`Repo already checked out at ${repoPath}, reusing`);
-    // Pull latest changes to keep the checkout fresh
+    const env = { ...getGhEnv(), GIT_TERMINAL_PROMPT: "0" };
+    // Ensure the remote URL always has a fresh token embedded so pull doesn't
+    // hit an auth prompt or stale credential.
+    const authenticatedUrl = toAuthenticatedUrl(getRepoUrl());
+    await execFileAsync(
+      "git",
+      ["-C", repoPath, "remote", "set-url", "origin", authenticatedUrl],
+      { env }
+    ).catch((err) => {
+      console.warn(`git remote set-url failed (non-fatal): ${err.message}`);
+    });
     await execFileAsync("git", ["-C", repoPath, "pull", "--ff-only"], {
-      env: { ...getGhEnv(), GIT_TERMINAL_PROMPT: "0" },
+      env,
     }).catch((err) => {
       console.warn(`git pull failed (non-fatal): ${err.message}`);
     });
