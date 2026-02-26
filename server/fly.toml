@@ -9,8 +9,8 @@ primary_region = 'yyz'
 [build]
 
 [deploy]
-  release_timeout = 180
-  wait_timeout = 180
+  release_timeout = "180s"
+  wait_timeout = "180s"
 
 [http_service]
   internal_port = 3000
