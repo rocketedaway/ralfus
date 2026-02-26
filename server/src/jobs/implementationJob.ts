@@ -68,7 +68,9 @@ export async function runImplementationJob(
   }
 
   // 3. Ensure repo is checked out
-  const repoPath = record.repoPath ?? (await ensureRepoCheckedOut(issueId));
+  // Always call ensureRepoCheckedOut — it reuses an existing checkout if .git is present,
+  // but re-clones if /tmp was cleared after a machine restart.
+  const repoPath = await ensureRepoCheckedOut(issueId);
 
   // 4. Create the feature branch
   const branchName = `ralfus/${issue.identifier.toLowerCase()}`;

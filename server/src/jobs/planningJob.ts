@@ -212,7 +212,9 @@ export async function runClarificationJob(
   // 1. Fetch updated issue + full comment thread from Linear
   const issue = await fetchIssueWithComments(linear, issueId);
 
-  const repoPath = record.repoPath ?? (await ensureRepoCheckedOut(issueId));
+  // Always call ensureRepoCheckedOut — it reuses an existing checkout if .git is present,
+  // but re-clones if /tmp was cleared after a machine restart.
+  const repoPath = await ensureRepoCheckedOut(issueId);
 
   // 2. If awaiting approval, check if the incoming message is an approval
   if (record.state === "awaiting_approval") {
