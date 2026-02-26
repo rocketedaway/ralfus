@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ RUN npm run build
 
 # ---
 
-FROM node:22-alpine AS runner
+FROM node:22-slim AS runner
 
 WORKDIR /app
 
@@ -19,7 +19,14 @@ ENV NODE_ENV=production
 
 # git is needed for repo operations; gh CLI for cloning via GitHub token auth
 # curl + bash are needed to install the Cursor Agent CLI
-RUN apk add --no-cache git github-cli curl bash
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    bash \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Cursor Agent CLI
 RUN curl -fsSL https://cursor.com/install | bash

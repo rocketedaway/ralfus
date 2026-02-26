@@ -76,17 +76,16 @@ export async function runPlanMode(
     child.stdin.end();
 
     child.on("close", (code) => {
-      const raw = stdout || stderr;
-
-      if (code !== 0 && !raw.trim()) {
+      if (code !== 0) {
         reject(
           new Error(
-            `cursor-agent exited with code ${code}. stderr: ${stderr.trim()}`
+            `cursor-agent exited with code ${code}. stderr: ${stderr.trim() || stdout.trim()}`
           )
         );
         return;
       }
 
+      const raw = stdout || stderr;
       resolve({
         raw: raw.trim(),
         needsClarification: detectClarificationNeeded(raw),
