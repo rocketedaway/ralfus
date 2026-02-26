@@ -9,7 +9,6 @@ primary_region = 'yyz'
 [build]
 
 [deploy]
-  strategy = "immediate"
   release_timeout = "180s"
   wait_timeout = "180s"
 
