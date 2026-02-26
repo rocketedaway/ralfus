@@ -43,27 +43,29 @@ export async function runPlanMode(
       process.env.CURSOR_AGENT_BIN ??
       `${process.env.HOME}/.local/bin/cursor-agent`;
 
+    console.log(`[cursor] Spawning cursor-agent: ${bin} --print --plan --workspace ${repoPath}`);
+
     const child = spawn(
       bin,
       [
-        "--headless",
+        "--print",
         "--plan",
-        "--no-auto-approve",
+        "--trust",
+        "--approve-mcps",
+        "--workspace", repoPath,
+        prompt,
       ],
       {
-        cwd: repoPath,
         env: {
           ...process.env,
           CURSOR_API_KEY: apiKey,
         },
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe"],
       }
     );
 
     let stdout = "";
     let stderr = "";
-
-    console.log(`[cursor] Spawning cursor-agent: ${bin}`);
 
     child.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString();
@@ -76,10 +78,6 @@ export async function runPlanMode(
       stderr += text;
       process.stdout.write(`[cursor:stderr] ${text}`);
     });
-
-    // Write the prompt to stdin and close it so the agent knows input is done
-    child.stdin.write(prompt);
-    child.stdin.end();
 
     child.on("close", (code) => {
       console.log(`[cursor] cursor-agent exited with code ${code}`);
