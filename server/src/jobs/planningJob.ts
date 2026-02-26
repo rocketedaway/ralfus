@@ -3,11 +3,13 @@ import { getIssue, upsertIssue } from "../db";
 import {
   fetchIssueWithComments,
   postAgentActivity,
-  updateIssueStatus,
+  postPlanComment,
   IssueComment,
 } from "../services/linear";
 import { ensureRepoCheckedOut } from "../services/github";
 import { runPlanMode } from "../services/cursor";
+import { getQueue } from "./queue";
+import { runImplementationJob } from "./implementationJob";
 
 // ---------------------------------------------------------------------------
 // Prompt builders
@@ -50,6 +52,27 @@ function isApproval(text: string): boolean {
   );
 }
 
+/**
+ * Converts a numbered plan (from Cursor output) into checkbox markdown format
+ * suitable for posting as a Linear comment.
+ *
+ * "1. Add auth middleware" → "- [ ] Step 1: Add auth middleware"
+ */
+function planTextToCheckboxes(planText: string): string {
+  // Strip any clarifying questions section if present
+  const planOnly = planText.split(/^##\s+Clarif/im)[0].trim();
+
+  return planOnly
+    .split("\n")
+    .map((line) => {
+      const match = line.match(/^(\d+)\.\s+(.+)/);
+      if (match) return `- [ ] Step ${match[1]}: ${match[2].trim()}`;
+      return line;
+    })
+    .join("\n")
+    .trim();
+}
+
 async function postPlanAndAwaitApproval(
   linear: LinearClient,
   agentSessionId: string,
@@ -58,9 +81,20 @@ async function postPlanAndAwaitApproval(
   planText: string,
   repoPath: string
 ): Promise<void> {
-  const body = `## Implementation Plan\n\n${planText}\n\n---\n_Reply **approved** to start work, or share any feedback and I'll update the plan._`;
-  await postAgentActivity(linear, agentSessionId, body);
-  await upsertIssue(issueId, organizationId, "awaiting_approval", repoPath);
+  // Post the plan as a comment on the ticket (checkbox format) so Linear is the source of truth
+  const checkboxPlan = planTextToCheckboxes(planText);
+  const commentBody = `## Implementation Plan\n\n${checkboxPlan}`;
+  const commentId = await postPlanComment(linear, issueId, commentBody);
+
+  // Store the comment ID so the implementation job can reference and update it
+  await upsertIssue(issueId, organizationId, "awaiting_approval", repoPath, null, commentId);
+
+  // Notify the agent session thread
+  await postAgentActivity(
+    linear,
+    agentSessionId,
+    `## Implementation Plan\n\n${checkboxPlan}\n\n---\n_Reply **approved** to start work, or share any feedback and I'll update the plan._`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -185,9 +219,15 @@ export async function runClarificationJob(
     const messageToCheck = userMessage ?? issue.comments[issue.comments.length - 1]?.body ?? "";
     if (isApproval(messageToCheck)) {
       await postAgentActivity(linear, agentSessionId, `✅ Plan approved — starting work now!`);
-      await updateIssueStatus(linear, issueId, organizationId, "In Progress");
       await upsertIssue(issueId, organizationId, "in_progress", repoPath);
-      console.log(`[planningJob] Issue ${issueId} approved and now In Progress`);
+      console.log(`[planningJob] Issue ${issueId} approved — enqueuing implementation job`);
+      getQueue().add(async () => {
+        try {
+          await runImplementationJob(issueId, organizationId, accessToken);
+        } catch (err) {
+          console.error(`[queue] Implementation job failed for issue ${issueId}:`, err);
+        }
+      });
       return;
     }
     // Not an approval — treat as feedback and re-run the agent
