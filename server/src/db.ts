@@ -37,7 +37,7 @@ export async function initDb(): Promise<void> {
   console.log("Database initialized");
 }
 
-export type IssueState = "planning" | "awaiting_clarification" | "confirmed" | "in_progress";
+export type IssueState = "planning" | "awaiting_clarification" | "awaiting_approval" | "in_progress";
 
 export type IssueRecord = {
   id: string;
