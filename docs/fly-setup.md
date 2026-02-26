@@ -56,8 +56,19 @@ fly secrets set \
   LINEAR_CLIENT_ID=your_client_id \
   LINEAR_CLIENT_SECRET=your_client_secret \
   LINEAR_REDIRECT_URI=https://ralfus.fly.dev/oauth/callback \
-  LINEAR_WEBHOOK_SECRET=your_webhook_secret
+  LINEAR_WEBHOOK_SECRET=your_webhook_secret \
+  GITHUB_TOKEN=your_github_pat \
+  GITHUB_REPO_URL=https://github.com/your-org/your-repo \
+  CURSOR_API_KEY=your_cursor_api_key
 ```
+
+| Secret | Where to get it |
+|---|---|
+| `LINEAR_CLIENT_ID` / `LINEAR_CLIENT_SECRET` | [linear.app/settings/api/applications](https://linear.app/settings/api/applications) |
+| `LINEAR_WEBHOOK_SECRET` | Linear OAuth app settings |
+| `GITHUB_TOKEN` | [github.com/settings/tokens](https://github.com/settings/tokens) — classic token with `repo` scope |
+| `GITHUB_REPO_URL` | HTTPS URL of the repo to work in, e.g. `https://github.com/org/repo` |
+| `CURSOR_API_KEY` | Cursor account settings |
 
 Confirm they were saved:
 
@@ -66,6 +77,14 @@ fly secrets list
 ```
 
 > If you switch to a hosted Turso database later, also set `LIBSQL_URL` and `LIBSQL_AUTH_TOKEN` here.
+
+Non-sensitive config (`WORK_DIR`, `AGENT_CONCURRENCY`) can be set as plain env vars in `fly.toml` under `[env]` instead:
+
+```toml
+[env]
+  WORK_DIR = "/tmp/ralfus-work"
+  AGENT_CONCURRENCY = "2"
+```
 
 ---
 
