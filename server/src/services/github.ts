@@ -37,10 +37,24 @@ function toHttpsUrl(url: string): string {
   return url;
 }
 
-function getGhEnv(): NodeJS.ProcessEnv {
+function getGithubToken(): string {
   const token = process.env.GITHUB_TOKEN;
   if (!token) throw new Error("GITHUB_TOKEN env var is not set");
+  return token;
+}
+
+function getGhEnv(): NodeJS.ProcessEnv {
+  const token = getGithubToken();
   return { ...process.env, GH_TOKEN: token };
+}
+
+/**
+ * Embeds the GitHub token into an HTTPS URL for credential-free git operations.
+ * e.g. https://github.com/owner/repo.git → https://x-token-auth:<token>@github.com/owner/repo.git
+ */
+function toAuthenticatedUrl(httpsUrl: string): string {
+  const token = getGithubToken();
+  return httpsUrl.replace("https://", `https://x-token-auth:${token}@`);
 }
 
 /**
@@ -55,7 +69,7 @@ export async function ensureRepoCheckedOut(issueId: string): Promise<string> {
     console.log(`Repo already checked out at ${repoPath}, reusing`);
     // Pull latest changes to keep the checkout fresh
     await execFileAsync("git", ["-C", repoPath, "pull", "--ff-only"], {
-      env: getGhEnv(),
+      env: { ...getGhEnv(), GIT_TERMINAL_PROMPT: "0" },
     }).catch((err) => {
       console.warn(`git pull failed (non-fatal): ${err.message}`);
     });
@@ -67,7 +81,7 @@ export async function ensureRepoCheckedOut(issueId: string): Promise<string> {
 
   fs.mkdirSync(workDir, { recursive: true });
 
-  await execFileAsync("gh", ["repo", "clone", repoUrl, repoPath], {
+  await execFileAsync("git", ["clone", toAuthenticatedUrl(repoUrl), repoPath], {
     env: getGhEnv(),
   });
 
