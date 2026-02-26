@@ -26,13 +26,21 @@ export async function initDb(): Promise<void> {
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS issues (
-      id               TEXT PRIMARY KEY,
-      organization_id  TEXT NOT NULL,
-      state            TEXT NOT NULL DEFAULT 'planning',
-      repo_path        TEXT,
-      updated_at       INTEGER NOT NULL DEFAULT (unixepoch())
+      id                TEXT PRIMARY KEY,
+      organization_id   TEXT NOT NULL,
+      state             TEXT NOT NULL DEFAULT 'planning',
+      repo_path         TEXT,
+      agent_session_id  TEXT,
+      updated_at        INTEGER NOT NULL DEFAULT (unixepoch())
     )
   `);
+
+  // Migrate existing tables that predate the agent_session_id column
+  try {
+    await db.execute("ALTER TABLE issues ADD COLUMN agent_session_id TEXT");
+  } catch {
+    // Column already exists — ignore
+  }
 
   console.log("Database initialized");
 }
@@ -44,32 +52,41 @@ export type IssueRecord = {
   organizationId: string;
   state: IssueState;
   repoPath: string | null;
+  agentSessionId: string | null;
 };
 
 export async function upsertIssue(
   id: string,
   organizationId: string,
   state: IssueState,
-  repoPath?: string | null
+  repoPath?: string | null,
+  agentSessionId?: string | null
 ): Promise<void> {
   const db = getDb();
   await db.execute({
     sql: `
-      INSERT INTO issues (id, organization_id, state, repo_path, updated_at)
-      VALUES (:id, :organizationId, :state, :repoPath, unixepoch())
+      INSERT INTO issues (id, organization_id, state, repo_path, agent_session_id, updated_at)
+      VALUES (:id, :organizationId, :state, :repoPath, :agentSessionId, unixepoch())
       ON CONFLICT (id) DO UPDATE SET
-        state      = excluded.state,
-        repo_path  = COALESCE(excluded.repo_path, issues.repo_path),
-        updated_at = excluded.updated_at
+        state             = excluded.state,
+        repo_path         = COALESCE(excluded.repo_path, issues.repo_path),
+        agent_session_id  = COALESCE(excluded.agent_session_id, issues.agent_session_id),
+        updated_at        = excluded.updated_at
     `,
-    args: { id, organizationId, state, repoPath: repoPath ?? null },
+    args: {
+      id,
+      organizationId,
+      state,
+      repoPath: repoPath ?? null,
+      agentSessionId: agentSessionId ?? null,
+    },
   });
 }
 
 export async function getIssue(id: string): Promise<IssueRecord | null> {
   const db = getDb();
   const result = await db.execute({
-    sql: "SELECT id, organization_id, state, repo_path FROM issues WHERE id = :id",
+    sql: "SELECT id, organization_id, state, repo_path, agent_session_id FROM issues WHERE id = :id",
     args: { id },
   });
 
@@ -81,6 +98,7 @@ export async function getIssue(id: string): Promise<IssueRecord | null> {
     organizationId: row.organization_id as string,
     state: row.state as IssueState,
     repoPath: row.repo_path as string | null,
+    agentSessionId: row.agent_session_id as string | null,
   };
 }
 
