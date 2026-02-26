@@ -61,7 +61,7 @@ async function handleWebhook(payload: WebhookPayload): Promise<void> {
   const { type, action } = payload;
   console.log(`Webhook received: type=${type} action=${action}`);
 
-  if (type === "AgentSession") {
+  if (type === "AgentSessionEvent") {
     await handleAgentSession(payload);
     return;
   }
@@ -136,12 +136,11 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
   const linear = new LinearClient({ accessToken });
 
   if (action === "created") {
-    // Acknowledge within 10 seconds by emitting a thought activity
     await linear.createAgentActivity({
       agentSessionId: agentSession.id,
       content: {
-        type: "thought",
-        body: "Session received. Processing…",
+        type: "response",
+        body: "🌵🏄 Gnarly wave, dude — I'm dropping in on this one. Give me a sec to wax the board and I'll be shredding through it shortly. Cowabunga!",
       },
     });
 
