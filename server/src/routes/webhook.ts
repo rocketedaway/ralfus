@@ -2,6 +2,8 @@ import { Router, Request, Response } from "express";
 import crypto from "crypto";
 import { LinearClient } from "@linear/sdk";
 import { getAccessToken } from "../db";
+import { getQueue } from "../jobs/queue";
+import { runInitialPlanningJob, runClarificationJob } from "../jobs/planningJob";
 
 export const webhookRouter = Router();
 
@@ -108,10 +110,14 @@ async function handleIssueUpdate(payload: WebhookPayload): Promise<void> {
     body: "🌵🏄 Gnarly wave, dude — I'm dropping in on this one. Give me a sec to wax the board and I'll be shredding through it shortly. Cowabunga!",
   });
 
-  // TODO: Kick off your agent loop here.
-  // data.id          — issue ID
-  // data.title       — issue title
-  // data.description — issue description (if set)
+  // Enqueue the initial planning job
+  getQueue().add(async () => {
+    try {
+      await runInitialPlanningJob(data.id, payload.organizationId, accessToken);
+    } catch (err) {
+      console.error(`[queue] Initial planning job failed for issue ${data.id}:`, err);
+    }
+  });
 }
 
 async function handleAgentSession(payload: WebhookPayload): Promise<void> {
@@ -144,22 +150,31 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
       },
     });
 
-    // TODO: Use agentSession.promptContext or agentSession.issue to build
-    //       your agent prompt and begin the agent loop.
     console.log("Agent session created:", agentSession.id);
     console.log("Prompt context:", agentSession.promptContext);
   } else if (action === "prompted") {
     const userMessage = payload.agentActivity?.body ?? "";
-    console.log("User follow-up prompt:", userMessage);
+    const issueId = agentSession.issue?.id;
 
-    // TODO: Insert userMessage into your conversation history and continue the loop.
+    console.log("User follow-up prompt:", userMessage);
 
     await linear.createAgentActivity({
       agentSessionId: agentSession.id,
       content: {
         type: "thought",
-        body: "Received your follow-up. Processing…",
+        body: "🌵🏄 Gnarly — catching that wave of context! Shredding through your answers and reworking the plan. Hang loose!",
       },
     });
+
+    // If this session is tied to an issue, enqueue a clarification job
+    if (issueId) {
+      getQueue().add(async () => {
+        try {
+          await runClarificationJob(issueId, payload.organizationId, accessToken);
+        } catch (err) {
+          console.error(`[queue] Clarification job failed for issue ${issueId}:`, err);
+        }
+      });
+    }
   }
 }
