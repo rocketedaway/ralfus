@@ -24,7 +24,64 @@ export async function initDb(): Promise<void> {
     )
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS issues (
+      id               TEXT PRIMARY KEY,
+      organization_id  TEXT NOT NULL,
+      state            TEXT NOT NULL DEFAULT 'planning',
+      repo_path        TEXT,
+      updated_at       INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `);
+
   console.log("Database initialized");
+}
+
+export type IssueState = "planning" | "awaiting_clarification" | "confirmed" | "in_progress";
+
+export type IssueRecord = {
+  id: string;
+  organizationId: string;
+  state: IssueState;
+  repoPath: string | null;
+};
+
+export async function upsertIssue(
+  id: string,
+  organizationId: string,
+  state: IssueState,
+  repoPath?: string | null
+): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `
+      INSERT INTO issues (id, organization_id, state, repo_path, updated_at)
+      VALUES (:id, :organizationId, :state, :repoPath, unixepoch())
+      ON CONFLICT (id) DO UPDATE SET
+        state      = excluded.state,
+        repo_path  = COALESCE(excluded.repo_path, issues.repo_path),
+        updated_at = excluded.updated_at
+    `,
+    args: { id, organizationId, state, repoPath: repoPath ?? null },
+  });
+}
+
+export async function getIssue(id: string): Promise<IssueRecord | null> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: "SELECT id, organization_id, state, repo_path FROM issues WHERE id = :id",
+    args: { id },
+  });
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    id: row.id as string,
+    organizationId: row.organization_id as string,
+    state: row.state as IssueState,
+    repoPath: row.repo_path as string | null,
+  };
 }
 
 export async function upsertWorkspace(
