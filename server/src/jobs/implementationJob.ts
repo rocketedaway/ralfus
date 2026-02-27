@@ -34,6 +34,21 @@ export function parsePlanSteps(commentBody: string): PlanStep[] {
   return steps;
 }
 
+/**
+ * Extracts already-checked steps from the plan comment body.
+ * Matches lines like: `- [x] Step 1: Description`
+ */
+export function parseCheckedSteps(commentBody: string): PlanStep[] {
+  const steps: PlanStep[] = [];
+  for (const line of commentBody.split("\n")) {
+    const match = line.match(/^- \[x\] Step (\d+): (.+)$/);
+    if (match) {
+      steps.push({ stepNumber: parseInt(match[1], 10), text: match[2].trim() });
+    }
+  }
+  return steps;
+}
+
 export async function runImplementationJob(
   issueId: string,
   orgId: string,
@@ -61,9 +76,10 @@ export async function runImplementationJob(
   console.log(`[implementationJob] Fetching plan comment ${planCommentId}`);
   let currentCommentBody = await fetchComment(linear, planCommentId);
   const steps = parsePlanSteps(currentCommentBody);
+  const checkedSteps = parseCheckedSteps(currentCommentBody);
 
-  if (steps.length === 0) {
-    console.warn(`[implementationJob] No unchecked steps found in plan comment for issue ${issueId}`);
+  if (steps.length === 0 && checkedSteps.length === 0) {
+    console.warn(`[implementationJob] No steps found in plan comment for issue ${issueId}`);
     await postAgentActivity(
       linear,
       agentSessionId,
@@ -72,7 +88,11 @@ export async function runImplementationJob(
     return;
   }
 
-  const isResuming = currentCommentBody.includes("- [x] Step ");
+  if (steps.length === 0 && checkedSteps.length > 0) {
+    console.log(`[implementationJob] All ${checkedSteps.length} steps already completed — skipping to PR creation`);
+  }
+
+  const isResuming = checkedSteps.length > 0;
   console.log(`[implementationJob] Found ${steps.length} unchecked step(s) to implement: ${steps.map((s) => `Step ${s.stepNumber}`).join(", ")}${isResuming ? " (resuming)" : ""}`);
 
   // 3. Ensure repo is checked out
@@ -102,7 +122,7 @@ export async function runImplementationJob(
     );
   }
 
-  // 6. Implement each step, committing after each one
+  // 6. Implement each step, committing after each one (skipped if all already done)
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     const stepLabel = `Step ${step.stepNumber}: ${step.text}`;
@@ -158,7 +178,8 @@ export async function runImplementationJob(
 
   // 7. Create the pull request
   console.log(`[implementationJob] All steps done — creating pull request for issue ${issueId}`);
-  const implementationSummary = steps.map((s) => `- ${s.text}`).join("\n");
+  const allSteps = steps.length > 0 ? steps : checkedSteps;
+  const implementationSummary = allSteps.map((s) => `- ${s.text}`).join("\n");
   const prBody = [
     `Resolves [${issue.identifier}](${issue.url})`,
     "",
