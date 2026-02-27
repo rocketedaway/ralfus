@@ -144,13 +144,29 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
   const linear = new LinearClient({ accessToken });
 
   if (action === "created") {
-    await linear.createAgentActivity({
-      agentSessionId: agentSession.id,
-      content: {
-        type: "response",
-        body: "🌵🏄 Gnarly wave, dude — I'm dropping in on this one. Give me a sec to wax the board and I'll be shredding through it shortly. Cowabunga!",
-      },
-    });
+    try {
+      await linear.createAgentActivity({
+        agentSessionId: agentSession.id,
+        content: {
+          type: "response",
+          body: "🌵🏄 Gnarly wave, dude — I'm dropping in on this one. Give me a sec to wax the board and I'll be shredding through it shortly. Cowabunga!",
+        },
+      });
+    } catch (err) {
+      const isAuthError = err instanceof Error && (
+        err.message.includes("Authentication") ||
+        err.message.includes("not authenticated") ||
+        ("type" in err && (err as { type?: string }).type === "AuthenticationError")
+      );
+      if (isAuthError) {
+        console.error(
+          `[webhook] 401 posting greeting activity for session ${agentSession.id} — ` +
+          `the Linear OAuth token may be stale. Re-authorize at /oauth/authorize to refresh it.`
+        );
+      } else {
+        console.error(`[webhook] Failed to post greeting activity for session ${agentSession.id}:`, err);
+      }
+    }
 
     console.log("Agent session created:", agentSession.id);
     console.log("Prompt context:", agentSession.promptContext);
@@ -201,13 +217,30 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
 
     console.log(`[webhook] prompted — issueId=${issueId ?? "none"} sessionId=${agentSession.id} userMessage="${userMessage.slice(0, 120)}"`);
 
-    await linear.createAgentActivity({
-      agentSessionId: agentSession.id,
-      content: {
-        type: "thought",
-        body: "🌵🏄 Gnarly — catching that wave of context! Shredding through your answers and reworking the plan. Hang loose!",
-      },
-    });
+    try {
+      await linear.createAgentActivity({
+        agentSessionId: agentSession.id,
+        content: {
+          type: "thought",
+          body: "🌵🏄 Gnarly — catching that wave of context! Shredding through your answers and reworking the plan. Hang loose!",
+        },
+      });
+    } catch (err) {
+      const isAuthError = err instanceof Error && (
+        err.message.includes("Authentication") ||
+        err.message.includes("not authenticated") ||
+        ("type" in err && (err as { type?: string }).type === "AuthenticationError")
+      );
+      if (isAuthError) {
+        console.error(
+          `[webhook] 401 posting thought activity for session ${agentSession.id} — ` +
+          `the Linear OAuth token may be stale. Re-authorize at /oauth/authorize to refresh it.`
+        );
+      } else {
+        console.error(`[webhook] Failed to post thought activity for session ${agentSession.id}:`, err);
+      }
+      // Don't bail — continue to enqueue the clarification job even if the thought fails
+    }
 
     if (issueId) {
       console.log(`[webhook] Enqueuing clarification job for issue ${issueId}`);
