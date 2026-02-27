@@ -195,7 +195,19 @@ export async function runImplementationJob(
     "- Manually verify the implemented functionality against the Linear ticket",
   ].join("\n");
 
-  const prUrl = await createPullRequest(repoPath, issue.title, prBody);
+  let prUrl: string;
+  try {
+    prUrl = await createPullRequest(repoPath, issue.title, prBody);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[implementationJob] PR creation failed: ${msg}`);
+    await postAgentActivity(
+      linear,
+      agentSessionId,
+      `⚠️ All steps are done but the PR couldn't be created: ${msg}`
+    );
+    return;
+  }
   console.log(`[implementationJob] Pull request created: ${prUrl}`);
 
   // 8. Transition Linear ticket to In Review

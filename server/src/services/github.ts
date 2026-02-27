@@ -185,23 +185,31 @@ export async function createPullRequest(
   if (!repoMatch) throw new Error(`Cannot parse GitHub owner/repo from remote URL: ${remoteUrl}`);
   const [, owner, repo] = repoMatch;
 
-  // Resolve the default branch via GitHub API, then sanity-check it isn't the feature branch itself
-  const repoInfoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  });
-  const repoInfo = repoInfoRes.ok
-    ? (await repoInfoRes.json()) as { default_branch: string }
-    : null;
-  let base = repoInfo?.default_branch ?? "main";
-  // If the API returns the feature branch itself as default (e.g. empty repo with no main),
-  // fall back to "main" so the PR targets the correct integration branch.
-  if (base === head) {
-    base = "main";
+  // Fetch remote branches to find the best base (exclude the feature branch itself)
+  await execFileAsync("git", ["-C", repoPath, "fetch", "--prune", "origin"], { env: process.env });
+  const { stdout: branchListOut } = await execFileAsync(
+    "git",
+    ["-C", repoPath, "branch", "-r", "--format=%(refname:short)"],
+    { env: process.env }
+  );
+  const remoteBranches = branchListOut
+    .split("\n")
+    .map((b) => b.trim().replace(/^origin\//, ""))
+    .filter((b) => b && b !== "HEAD" && b !== head);
+
+  if (remoteBranches.length === 0) {
+    throw new Error(
+      `Cannot create PR: "${head}" is the only branch on the remote. ` +
+        `Push a base branch (e.g. "main") to the repository first, then re-trigger.`
+    );
   }
+
+  // Prefer common integration branch names, then fall back to the first available
+  const preferredBases = ["main", "master"];
+  const base =
+    preferredBases.find((b) => remoteBranches.includes(b)) ?? remoteBranches[0];
+
+  console.log(`[createPullRequest] Remote branches: [${remoteBranches.join(", ")}] → using base: "${base}"`);
 
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
     method: "POST",
