@@ -108,6 +108,12 @@ export async function runImplementationJob(
     const stepLabel = `Step ${step.stepNumber}: ${step.text}`;
     console.log(`[implementationJob] [${i + 1}/${steps.length}] Running cursor-agent for: ${stepLabel}`);
 
+    await postAgentActivity(
+      linear,
+      agentSessionId,
+      `🌊 Dropping in on step ${step.stepNumber}/${steps.length}: ${step.text}…`
+    );
+
     const prompt = [
       "You are a software engineer implementing a feature step by step.",
       "",
