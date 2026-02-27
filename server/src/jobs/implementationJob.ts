@@ -67,7 +67,7 @@ export async function runImplementationJob(
     await postAgentActivity(
       linear,
       agentSessionId,
-      "⚠️ No unchecked plan steps found in the Linear comment. Implementation cancelled."
+      "🌵 Bummer, dude — no unchecked steps found in the plan comment. Wiped out before we even paddled in. Implementation cancelled."
     );
     return;
   }
@@ -91,7 +91,7 @@ export async function runImplementationJob(
   await postAgentActivity(
     linear,
     agentSessionId,
-    `🌿 Branch created: [${branchName}](${branchUrl}) — starting implementation now!`
+    `🌵 Fresh branch planted: [${branchName}](${branchUrl}) — dropping in and shredding code now! 🏄`
   );
 
   // 6. Implement each step, committing after each one
@@ -138,7 +138,7 @@ export async function runImplementationJob(
     await postAgentActivity(
       linear,
       agentSessionId,
-      `✅ Committed step ${step.stepNumber}/${steps.length}: ${step.text}`
+      `✅ Shredded step ${step.stepNumber}/${steps.length}: ${step.text} 🤙`
     );
   }
 
@@ -171,7 +171,7 @@ export async function runImplementationJob(
   await postAgentActivity(
     linear,
     agentSessionId,
-    `🎉 All steps implemented! PR ready for review: [View PR](${prUrl}) — ${reviewer}, please take a look!`
+    `🌊 Cowabunga! All steps shredded and stoked! PR is hanging loose for review: [View PR](${prUrl}) — ${reviewer}, ready to catch this wave? 🌵`
   );
 
   // 10. Mark as done in the DB
