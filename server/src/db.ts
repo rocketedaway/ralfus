@@ -19,10 +19,21 @@ export async function initDb(): Promise<void> {
     CREATE TABLE IF NOT EXISTS workspaces (
       organization_id  TEXT PRIMARY KEY,
       access_token     TEXT NOT NULL,
+      refresh_token    TEXT,
+      expires_at       INTEGER,
       created_at       INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at       INTEGER NOT NULL DEFAULT (unixepoch())
     )
   `);
+
+  // Migrate existing tables that predate refresh token columns
+  for (const col of ["refresh_token TEXT", "expires_at INTEGER"]) {
+    try {
+      await db.execute(`ALTER TABLE workspaces ADD COLUMN ${col}`);
+    } catch {
+      // Column already exists — ignore
+    }
+  }
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS issues (
@@ -116,28 +127,123 @@ export async function getIssue(id: string): Promise<IssueRecord | null> {
 
 export async function upsertWorkspace(
   organizationId: string,
-  accessToken: string
+  accessToken: string,
+  refreshToken?: string | null,
+  expiresAt?: number | null
 ): Promise<void> {
   const db = getDb();
   await db.execute({
     sql: `
-      INSERT INTO workspaces (organization_id, access_token, updated_at)
-      VALUES (:organizationId, :accessToken, unixepoch())
+      INSERT INTO workspaces (organization_id, access_token, refresh_token, expires_at, updated_at)
+      VALUES (:organizationId, :accessToken, :refreshToken, :expiresAt, unixepoch())
       ON CONFLICT (organization_id) DO UPDATE SET
-        access_token = excluded.access_token,
-        updated_at   = excluded.updated_at
+        access_token  = excluded.access_token,
+        refresh_token = COALESCE(excluded.refresh_token, workspaces.refresh_token),
+        expires_at    = COALESCE(excluded.expires_at, workspaces.expires_at),
+        updated_at    = excluded.updated_at
     `,
-    args: { organizationId, accessToken },
+    args: {
+      organizationId,
+      accessToken,
+      refreshToken: refreshToken ?? null,
+      expiresAt: expiresAt ?? null,
+    },
   });
 }
 
-export async function getAccessToken(organizationId: string): Promise<string | null> {
+type WorkspaceTokenRow = {
+  accessToken: string;
+  refreshToken: string | null;
+  expiresAt: number | null;
+};
+
+async function getWorkspaceTokens(organizationId: string): Promise<WorkspaceTokenRow | null> {
   const db = getDb();
   const result = await db.execute({
-    sql: "SELECT access_token FROM workspaces WHERE organization_id = :organizationId",
+    sql: "SELECT access_token, refresh_token, expires_at FROM workspaces WHERE organization_id = :organizationId",
     args: { organizationId },
   });
 
   const row = result.rows[0];
-  return row ? (row.access_token as string) : null;
+  if (!row) return null;
+  return {
+    accessToken: row.access_token as string,
+    refreshToken: row.refresh_token as string | null,
+    expiresAt: row.expires_at as number | null,
+  };
+}
+
+/**
+ * Returns a valid access token for the given organization, automatically
+ * refreshing it if it has expired (or expires within the next 5 minutes).
+ * Falls back to the stored token if no refresh token is available.
+ */
+export async function getValidAccessToken(organizationId: string): Promise<string | null> {
+  const tokens = await getWorkspaceTokens(organizationId);
+  if (!tokens) return null;
+
+  const { accessToken, refreshToken, expiresAt } = tokens;
+
+  // If no expiry or refresh token, return what we have (legacy long-lived token)
+  if (!expiresAt || !refreshToken) return accessToken;
+
+  // Refresh if the token expires within the next 5 minutes
+  const nowSecs = Math.floor(Date.now() / 1000);
+  if (expiresAt - nowSecs > 300) return accessToken;
+
+  console.log(`[auth] Access token for org ${organizationId} is expiring — refreshing...`);
+  try {
+    const newTokens = await refreshLinearToken(refreshToken);
+    const newExpiresAt = Math.floor(Date.now() / 1000) + newTokens.expiresIn;
+    await upsertWorkspace(organizationId, newTokens.accessToken, newTokens.refreshToken, newExpiresAt);
+    console.log(`[auth] Token refreshed for org ${organizationId}`);
+    return newTokens.accessToken;
+  } catch (err) {
+    console.error(`[auth] Token refresh failed for org ${organizationId}: ${err} — using existing token`);
+    return accessToken;
+  }
+}
+
+async function refreshLinearToken(
+  refreshToken: string
+): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
+  const clientId = process.env.LINEAR_CLIENT_ID;
+  const clientSecret = process.env.LINEAR_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error("LINEAR_CLIENT_ID or LINEAR_CLIENT_SECRET env var is not set");
+  }
+
+  const response = await fetch("https://api.linear.app/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    }).toString(),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Linear token refresh failed (${response.status}): ${text}`);
+  }
+
+  const data = (await response.json()) as {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  };
+
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresIn: data.expires_in,
+  };
+}
+
+/** @deprecated Use getValidAccessToken instead */
+export async function getAccessToken(organizationId: string): Promise<string | null> {
+  return getValidAccessToken(organizationId);
 }

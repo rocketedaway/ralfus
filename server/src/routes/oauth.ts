@@ -93,14 +93,25 @@ oauthRouter.get("/callback", async (req: Request, res: Response) => {
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );
 
-    const { access_token } = tokenResponse.data as { access_token: string };
+    const { access_token, refresh_token, expires_in } = tokenResponse.data as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in?: number;
+    };
+
+    const expiresAt = expires_in != null
+      ? Math.floor(Date.now() / 1000) + expires_in
+      : null;
 
     const linear = new LinearClient({ accessToken: access_token });
     const org = await linear.organization;
     const organizationId = org.id;
 
-    await upsertWorkspace(organizationId, access_token);
-    console.log(`Workspace ${organizationId} installed`);
+    await upsertWorkspace(organizationId, access_token, refresh_token ?? null, expiresAt);
+    console.log(
+      `Workspace ${organizationId} installed` +
+      (refresh_token ? " (refresh token stored)" : " (no refresh token — long-lived token)")
+    );
 
     res.json({ success: true });
   } catch (err) {
