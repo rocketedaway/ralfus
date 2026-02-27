@@ -118,7 +118,13 @@ export async function createBranch(repoPath: string, branchName: string): Promis
 export async function commitAndPush(repoPath: string, message: string): Promise<void> {
   const env = getGhEnv();
   await execFileAsync("git", ["-C", repoPath, "add", "-A"], { env });
-  await execFileAsync("git", ["-C", repoPath, "commit", "-m", message], { env });
+  await execFileAsync("git", [
+    "-C", repoPath,
+    "-c", "user.email=ralfus@ralfus.app",
+    "-c", "user.name=Ralfus",
+    "commit",
+    "-m", message,
+  ], { env });
   await execFileAsync("git", ["-C", repoPath, "push", "--set-upstream", "origin", "HEAD"], { env });
   console.log(`Committed and pushed: "${message}"`);
 }
