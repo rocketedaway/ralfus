@@ -85,7 +85,12 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
     if (payload.action !== "created") return;
 
     const commentBody = payload.comment.body?.trim() ?? "";
-    if (!TRIGGER_PREFIX.test(commentBody)) return;
+    if (!TRIGGER_PREFIX.test(commentBody)) {
+      console.log(
+        `[github webhook] review comment on ${payload.repository.owner.login}/${payload.repository.name}#${payload.pull_request.number} by @${payload.comment.user.login} does not start with @ralfus — ignoring`
+      );
+      return;
+    }
 
     const instruction = commentBody.replace(TRIGGER_PREFIX, "").trim();
     if (!instruction) {
@@ -131,7 +136,12 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
   if (!payload.issue.pull_request) return;
 
   const commentBody = payload.comment.body?.trim() ?? "";
-  if (!TRIGGER_PREFIX.test(commentBody)) return;
+  if (!TRIGGER_PREFIX.test(commentBody)) {
+    console.log(
+      `[github webhook] issue_comment on ${payload.repository.owner.login}/${payload.repository.name}#${payload.issue.number} by @${payload.comment.user.login} does not start with @ralfus — ignoring`
+    );
+    return;
+  }
 
   const instruction = commentBody.replace(TRIGGER_PREFIX, "").trim();
   if (!instruction) {

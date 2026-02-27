@@ -115,7 +115,13 @@ oauthRouter.get("/callback", async (req: Request, res: Response) => {
 
     res.json({ success: true });
   } catch (err) {
-    console.error("Token exchange failed:", err);
+    if (axios.isAxiosError(err)) {
+      console.error(
+        `Token exchange failed: ${err.response?.status} ${err.response?.statusText} — ${JSON.stringify(err.response?.data)}`
+      );
+    } else {
+      console.error("Token exchange failed:", err);
+    }
     res.status(500).json({ error: "Token exchange failed" });
   }
 });
