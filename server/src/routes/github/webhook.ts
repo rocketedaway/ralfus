@@ -53,6 +53,23 @@ type PullRequestReviewCommentPayload = {
   };
 };
 
+type PullRequestReviewPayload = {
+  action: string;
+  review: {
+    id: number;
+    body: string | null;
+    user: { login: string };
+  };
+  pull_request: {
+    number: number;
+    title: string;
+  };
+  repository: {
+    name: string;
+    owner: { login: string };
+  };
+};
+
 const TRIGGER_REGEX = /@ralfus(?:-bot)?\s+(.+)/is;
 
 githubWebhookRouter.post("/", async (req: Request, res: Response) => {
@@ -109,6 +126,58 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
 
     console.log(
       `[github webhook] Enqueuing prCommentJob (review comment) — ${owner}/${repo}#${prNumber} by @${payload.comment.user.login}: "${instruction.slice(0, 80)}"`
+    );
+
+    getQueue().add(async () => {
+      try {
+        await runPrCommentJob(owner, repo, prNumber, instruction, replyContext);
+      } catch (err) {
+        console.error(
+          `[queue] prCommentJob failed for ${owner}/${repo}#${prNumber}:`,
+          err
+        );
+      }
+    });
+    return;
+  }
+
+  if (event === "pull_request_review") {
+    let payload: PullRequestReviewPayload;
+    try {
+      payload = JSON.parse((req.body as Buffer).toString("utf-8")) as PullRequestReviewPayload;
+    } catch (err) {
+      console.error("[github webhook] Failed to parse payload:", err);
+      return;
+    }
+
+    // Only act when the review is actually submitted (not dismissed/edited)
+    if (payload.action !== "submitted") {
+      console.log(`[github webhook] pull_request_review action="${payload.action}" — ignoring`);
+      return;
+    }
+
+    const reviewBody = payload.review.body?.trim() ?? "";
+    const reviewBodyMatch = TRIGGER_REGEX.exec(reviewBody);
+    if (!reviewBodyMatch) {
+      console.log(
+        `[github webhook] pull_request_review on ${payload.repository.owner.login}/${payload.repository.name}#${payload.pull_request.number} by @${payload.review.user.login} does not mention @ralfus in review body — ignoring`
+      );
+      return;
+    }
+
+    const instruction = reviewBodyMatch[1].trim();
+    if (!instruction) {
+      console.log("[github webhook] @ralfus review body had no instruction — ignoring");
+      return;
+    }
+
+    const owner = payload.repository.owner.login;
+    const repo = payload.repository.name;
+    const prNumber = payload.pull_request.number;
+    const replyContext: PrReplyContext = { type: "issue", originalBody: payload.review.body ?? "" };
+
+    console.log(
+      `[github webhook] Enqueuing prCommentJob (review body) — ${owner}/${repo}#${prNumber} by @${payload.review.user.login}: "${instruction.slice(0, 80)}"`
     );
 
     getQueue().add(async () => {

@@ -4,11 +4,14 @@ This guide explains how to configure a GitHub webhook so that Ralfus can respond
 
 ## How it works
 
-When a new comment is posted on a GitHub pull request that starts with `@ralfus`, Ralfus will:
+When a comment mentioning `@ralfus` is posted on a GitHub pull request, Ralfus will:
 
 1. Check out the PR's head branch
 2. Run Cursor's agent with the instruction as the prompt
 3. Commit and push any resulting changes back to the branch
+4. Reply in the same location as the original comment:
+   - **Inline review comments** (on a specific line of code) → reply threads directly under that line
+   - **PR body comments** (in the main conversation) → quote the original comment and reply in the PR conversation
 
 ---
 
@@ -60,7 +63,7 @@ GITHUB_WEBHOOK_SECRET=your_generated_secret
 | **Payload URL** | `https://ralfus.fly.dev/webhook/github` |
 | **Content type** | `application/json` |
 | **Secret** | The secret you generated in step 1 |
-| **Which events would you like to trigger this webhook?** | Select **Let me select individual events**, then check **Issue comments** only |
+| **Which events would you like to trigger this webhook?** | Select **Let me select individual events**, then check **Issue comments**, **Pull request review comments**, and **Pull request reviews** |
 | **Active** | Checked |
 
 4. Click **Add webhook**
