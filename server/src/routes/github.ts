@@ -36,6 +36,23 @@ type IssueCommentPayload = {
   };
 };
 
+type PullRequestReviewCommentPayload = {
+  action: string;
+  pull_request: {
+    number: number;
+    title: string;
+  };
+  comment: {
+    id: number;
+    body: string;
+    user: { login: string };
+  };
+  repository: {
+    name: string;
+    owner: { login: string };
+  };
+};
+
 const TRIGGER_PREFIX = /^@ralfus\s+/i;
 
 githubWebhookRouter.post("/", async (req: Request, res: Response) => {
@@ -55,6 +72,48 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
   res.status(200).json({ ok: true });
 
   const event = req.headers["x-github-event"] as string | undefined;
+
+  if (event === "pull_request_review_comment") {
+    let payload: PullRequestReviewCommentPayload;
+    try {
+      payload = JSON.parse((req.body as Buffer).toString("utf-8")) as PullRequestReviewCommentPayload;
+    } catch (err) {
+      console.error("[github webhook] Failed to parse payload:", err);
+      return;
+    }
+
+    if (payload.action !== "created") return;
+
+    const commentBody = payload.comment.body?.trim() ?? "";
+    if (!TRIGGER_PREFIX.test(commentBody)) return;
+
+    const instruction = commentBody.replace(TRIGGER_PREFIX, "").trim();
+    if (!instruction) {
+      console.log("[github webhook] @ralfus review comment had no instruction — ignoring");
+      return;
+    }
+
+    const owner = payload.repository.owner.login;
+    const repo = payload.repository.name;
+    const prNumber = payload.pull_request.number;
+
+    console.log(
+      `[github webhook] Enqueuing prCommentJob (review comment) — ${owner}/${repo}#${prNumber} by @${payload.comment.user.login}: "${instruction.slice(0, 80)}"`
+    );
+
+    getQueue().add(async () => {
+      try {
+        await runPrCommentJob(owner, repo, prNumber, instruction);
+      } catch (err) {
+        console.error(
+          `[queue] prCommentJob failed for ${owner}/${repo}#${prNumber}:`,
+          err
+        );
+      }
+    });
+    return;
+  }
+
   if (event !== "issue_comment") return;
 
   let payload: IssueCommentPayload;
