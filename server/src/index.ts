@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import { oauthRouter, webhookRouter, githubWebhookRouter } from "./routes";
+import { oauthRouter, linearWebhookRouter, githubWebhookRouter } from "./routes";
 import { initDb } from "./db";
 
 const app = express();
@@ -9,7 +9,7 @@ const PORT = process.env.PORT ?? 3000;
 app.use(
   "/webhook",
   express.raw({ type: "application/json" }),
-  webhookRouter
+  linearWebhookRouter
 );
 
 app.use(

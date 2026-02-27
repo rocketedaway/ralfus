@@ -5,7 +5,7 @@ import { getAccessToken, upsertIssue } from "../db";
 import { getQueue } from "../jobs/queue";
 import { runInitialPlanningJob, runClarificationJob } from "../jobs/planningJob";
 
-export const webhookRouter = Router();
+export const linearWebhookRouter = Router();
 
 function verifySignature(rawBody: Buffer, signature: string | undefined, secret: string): boolean {
   if (!signature) return false;
@@ -26,7 +26,7 @@ function verifySignature(rawBody: Buffer, signature: string | undefined, secret:
  *   LINEAR_WEBHOOK_SECRET  (found in your Linear OAuth app settings)
  *   LINEAR_ACCESS_TOKEN    (the workspace access token obtained via OAuth)
  */
-webhookRouter.post("/", async (req: Request, res: Response) => {
+linearWebhookRouter.post("/", async (req: Request, res: Response) => {
   const webhookSecret = process.env.LINEAR_WEBHOOK_SECRET;
 
   if (webhookSecret) {
