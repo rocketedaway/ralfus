@@ -25,9 +25,9 @@ primary_region = 'yyz'
     soft_limit = 20
 
 [[vm]]
-  memory = '1gb'
+  memory = '2gb'
   cpus = 1
-  memory_mb = 1024
+  memory_mb = 2048
 
 [mounts]
   source = "ralfus_data"
