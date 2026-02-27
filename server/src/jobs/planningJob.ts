@@ -57,7 +57,8 @@ function isApproval(text: string): boolean {
  * Converts a numbered plan (from Cursor output) into checkbox markdown format
  * suitable for posting as a Linear comment.
  *
- * "1. Add auth middleware" → "- [ ] Step 1: Add auth middleware"
+ * "1. Add auth middleware"       → "- [ ] Step 1: Add auth middleware"
+ * "### 1. Add auth middleware"   → "- [ ] Step 1: Add auth middleware"
  */
 function planTextToCheckboxes(planText: string): string {
   // Strip any clarifying questions section if present
@@ -66,7 +67,8 @@ function planTextToCheckboxes(planText: string): string {
   return planOnly
     .split("\n")
     .map((line) => {
-      const match = line.match(/^(\d+)\.\s+(.+)/);
+      // Match bare "1. Title", "### 1. Title", or "### 1\. Title" (escaped dot) forms
+      const match = line.match(/^(?:#{1,6}\s+)?(\d+)\\?[.)]\s+(.+)/);
       if (match) return `- [ ] Step ${match[1]}: ${match[2].trim()}`;
       return line;
     })
