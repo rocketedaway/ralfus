@@ -20,7 +20,3 @@ echo ""
 
 cd "$ROOT_DIR/server"
 fly deploy
-
-echo ""
-echo "Deploy complete. Tailing logs (Ctrl+C to exit)..."
-fly logs
