@@ -1,3 +1,2 @@
-export { oauthRouter } from "./oauth";
-export { linearWebhookRouter } from "./linear";
+export { linearOauthRouter, linearWebhookRouter } from "./linear";
 export { githubWebhookRouter } from "./github";

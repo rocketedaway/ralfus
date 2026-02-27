@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import crypto from "crypto";
-import { getQueue } from "../jobs/queue";
-import { runPrCommentJob } from "../jobs/prCommentJob";
+import { getQueue } from "../../jobs/queue";
+import { runPrCommentJob } from "../../jobs/prCommentJob";
 
 export const githubWebhookRouter = Router();
 

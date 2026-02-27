@@ -34,9 +34,13 @@ ralfus/
     │   ├── db.ts                  # libSQL client and helpers
     │   ├── routes/
     │   │   ├── index.ts
-    │   │   ├── oauth.ts           # /oauth/authorize, /oauth/callback
-    │   │   ├── webhook.ts         # /webhook (Linear events)
-    │   │   └── github.ts          # /webhook/github (GitHub events)
+    │   │   ├── linear/
+    │   │   │   ├── index.ts
+    │   │   │   ├── oauth.ts       # /oauth/authorize, /oauth/callback
+    │   │   │   └── webhook.ts     # /webhook (Linear events)
+    │   │   └── github/
+    │   │       ├── index.ts
+    │   │       └── webhook.ts     # /webhook/github (GitHub events)
     │   ├── services/
     │   │   ├── linear.ts          # Linear API helpers
     │   │   ├── github.ts          # git/gh CLI helpers

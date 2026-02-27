@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import { oauthRouter, linearWebhookRouter, githubWebhookRouter } from "./routes";
+import { linearOauthRouter, linearWebhookRouter, githubWebhookRouter } from "./routes";
 import { initDb } from "./db";
 
 const app = express();
@@ -21,7 +21,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/oauth", oauthRouter);
+app.use("/oauth", linearOauthRouter);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });

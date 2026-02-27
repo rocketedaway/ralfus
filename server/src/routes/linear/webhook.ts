@@ -1,9 +1,9 @@
 import { Router, Request, Response } from "express";
 import crypto from "crypto";
 import { LinearClient } from "@linear/sdk";
-import { getAccessToken, upsertIssue } from "../db";
-import { getQueue } from "../jobs/queue";
-import { runInitialPlanningJob, runClarificationJob } from "../jobs/planningJob";
+import { getAccessToken, upsertIssue } from "../../db";
+import { getQueue } from "../../jobs/queue";
+import { runInitialPlanningJob, runClarificationJob } from "../../jobs/planningJob";
 
 export const linearWebhookRouter = Router();
 

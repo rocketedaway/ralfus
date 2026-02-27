@@ -1,9 +1,9 @@
 import { Router, Request, Response } from "express";
 import axios from "axios";
 import { LinearClient } from "@linear/sdk";
-import { upsertWorkspace } from "../db";
+import { upsertWorkspace } from "../../db";
 
-export const oauthRouter = Router();
+export const linearOauthRouter = Router();
 
 const LINEAR_OAUTH_URL = "https://linear.app/oauth/authorize";
 const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
@@ -18,7 +18,7 @@ const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
  *   LINEAR_CLIENT_ID
  *   LINEAR_REDIRECT_URI  (e.g. https://your-app.fly.dev/oauth/callback)
  */
-oauthRouter.get("/authorize", (_req: Request, res: Response) => {
+linearOauthRouter.get("/authorize", (_req: Request, res: Response) => {
   const clientId = process.env.LINEAR_CLIENT_ID;
   const redirectUri = process.env.LINEAR_REDIRECT_URI;
 
@@ -58,7 +58,7 @@ oauthRouter.get("/authorize", (_req: Request, res: Response) => {
  *   LINEAR_CLIENT_SECRET
  *   LINEAR_REDIRECT_URI
  */
-oauthRouter.get("/callback", async (req: Request, res: Response) => {
+linearOauthRouter.get("/callback", async (req: Request, res: Response) => {
   const { code, error } = req.query;
 
   if (error) {
