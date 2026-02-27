@@ -115,10 +115,11 @@ export async function runImplementationJob(
       `🌵 Fresh branch planted: [${branchName}](${branchUrl}) — dropping in and shredding code now! 🏄`
     );
   } else {
+    const resumeFromStep = steps.length > 0 ? steps[0].stepNumber : "PR creation";
     await postAgentActivity(
       linear,
       agentSessionId,
-      `🌵 Paddling back out on [${branchName}](${branchUrl}) — resuming from Step ${steps[0].stepNumber}. Cowabunga! 🏄`
+      `🌵 Paddling back out on [${branchName}](${branchUrl}) — resuming from Step ${resumeFromStep}. Cowabunga! 🏄`
     );
   }
 
