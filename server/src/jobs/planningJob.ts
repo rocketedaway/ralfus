@@ -4,6 +4,7 @@ import {
   fetchIssueWithComments,
   postAgentActivity,
   postPlanComment,
+  updateComment,
   IssueComment,
 } from "../services/linear";
 import { ensureRepoCheckedOut } from "../services/github";
@@ -79,12 +80,20 @@ async function postPlanAndAwaitApproval(
   issueId: string,
   organizationId: string,
   planText: string,
-  repoPath: string
+  repoPath: string,
+  existingCommentId?: string | null
 ): Promise<void> {
-  // Post the plan as a comment on the ticket (checkbox format) so Linear is the source of truth
+  // Post (or update) the plan as a comment on the ticket in checkbox format
   const checkboxPlan = planTextToCheckboxes(planText);
   const commentBody = `## Implementation Plan\n\n${checkboxPlan}`;
-  const commentId = await postPlanComment(linear, issueId, commentBody);
+
+  let commentId: string;
+  if (existingCommentId) {
+    await updateComment(linear, existingCommentId, commentBody);
+    commentId = existingCommentId;
+  } else {
+    commentId = await postPlanComment(linear, issueId, commentBody);
+  }
 
   // Store the comment ID so the implementation job can reference and update it
   await upsertIssue(issueId, organizationId, "awaiting_approval", repoPath, null, commentId);
@@ -169,7 +178,7 @@ export async function runInitialPlanningJob(
     await upsertIssue(issueId, organizationId, "awaiting_clarification", repoPath);
     console.log(`[planningJob] Plan posted with clarifying questions for issue ${issueId}`);
   } else {
-    await postPlanAndAwaitApproval(linear, agentSessionId, issueId, organizationId, planResult.raw, repoPath);
+    await postPlanAndAwaitApproval(linear, agentSessionId, issueId, organizationId, planResult.raw, repoPath, null);
     console.log(`[planningJob] Plan posted for approval for issue ${issueId}`);
   }
 }
@@ -273,7 +282,7 @@ export async function runClarificationJob(
     await upsertIssue(issueId, organizationId, "awaiting_clarification", repoPath);
     console.log(`[planningJob] Updated plan with remaining questions for issue ${issueId}`);
   } else {
-    await postPlanAndAwaitApproval(linear, agentSessionId, issueId, organizationId, planResult.raw, repoPath);
+    await postPlanAndAwaitApproval(linear, agentSessionId, issueId, organizationId, planResult.raw, repoPath, record.planCommentId);
     console.log(`[planningJob] Updated plan posted for approval for issue ${issueId}`);
   }
 }
