@@ -6,6 +6,7 @@ import {
   fetchIssueWithComments,
   fetchComment,
   postAgentActivity,
+  postComment,
   updateIssueStatus,
   makeLinearClient,
 } from "../services/linear";
@@ -102,9 +103,10 @@ export async function runCodeReviewJob(
   await updateIssueStatus(linear, issueId, orgId, "In Review");
   console.log(`[codeReviewJob] Issue ${issueId} transitioned to "In Review"`);
 
-  // 9. Announce the PR and ping the reviewer
+  // 9. Announce the PR in the agent session and post a comment on the ticket
   const reviewer = issue.creatorName ? `@${issue.creatorName}` : "the team";
   await postAgentActivity(linear, agentSessionId, msgPrAnnounce(prUrl, reviewer));
+  await postComment(linear, issueId, `🌊 PR is up and ready for review: [View PR](${prUrl})`);
 
   // 10. Mark as implemented in the DB
   await upsertIssue(issueId, orgId, "implemented", repoPath, null, null, prUrl);
