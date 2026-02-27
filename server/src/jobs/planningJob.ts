@@ -81,16 +81,25 @@ function planTextToCheckboxes(planText: string): string {
     .join("\n")
     .trim();
 
-  return withoutHeader
+  const lines = withoutHeader
     .split("\n")
     .map((line) => {
       // Match bare "1. Title", "### 1. Title", or "### 1\. Title" (escaped dot) forms
       const match = line.match(/^(?:#{1,6}\s+)?(\d+)\\?[.)]\s+(.+)/);
       if (match) return `- [ ] Step ${match[1]}: ${match[2].trim()}`;
       return line;
-    })
-    .join("\n")
-    .trim();
+    });
+
+  // Drop any trailing lines that are plain prose (not list items, headings, or blank)
+  // These are closing remarks Cursor sometimes appends after the plan steps.
+  let lastPlanLine = lines.length - 1;
+  while (lastPlanLine >= 0) {
+    const line = lines[lastPlanLine].trim();
+    if (line === "" || /^[-*]/.test(line) || /^#/.test(line)) break;
+    lastPlanLine--;
+  }
+
+  return lines.slice(0, lastPlanLine + 1).join("\n").trim();
 }
 
 async function postPlanAndAwaitApproval(
@@ -104,7 +113,12 @@ async function postPlanAndAwaitApproval(
 ): Promise<void> {
   // Post (or update) the plan as a comment on the ticket in checkbox format
   const checkboxPlan = planTextToCheckboxes(planText);
-  const commentBody = `## Implementation Plan\n\n${checkboxPlan}`;
+  const lastUpdated = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const commentBody = `## Implementation Plan\nLast updated ${lastUpdated}\n\n${checkboxPlan}`;
 
   let commentId: string;
   if (existingCommentId) {
@@ -121,7 +135,7 @@ async function postPlanAndAwaitApproval(
   await postAgentActivity(
     linear,
     agentSessionId,
-    `## Implementation Plan\n\n${checkboxPlan}\n\n---\n${msgPlanApprovalCta()}`
+    `## Implementation Plan\nLast updated ${lastUpdated}\n\n${checkboxPlan}\n\n---\n${msgPlanApprovalCta()}`
   );
 }
 
