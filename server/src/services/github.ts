@@ -174,15 +174,6 @@ export async function createPullRequest(
   );
   const head = branchOut.trim();
 
-  // Resolve the default branch (base) from the remote
-  const { stdout: defaultBranchOut } = await execFileAsync(
-    "git",
-    ["-C", repoPath, "remote", "show", "origin"],
-    { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }
-  );
-  const baseMatch = defaultBranchOut.match(/HEAD branch:\s*(\S+)/);
-  const base = baseMatch ? baseMatch[1] : "main";
-
   // Extract owner/repo from the remote URL
   const { stdout: remoteUrlOut } = await execFileAsync(
     "git",
@@ -193,6 +184,19 @@ export async function createPullRequest(
   const repoMatch = remoteUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
   if (!repoMatch) throw new Error(`Cannot parse GitHub owner/repo from remote URL: ${remoteUrl}`);
   const [, owner, repo] = repoMatch;
+
+  // Resolve the default branch via GitHub API (more reliable than git remote show)
+  const repoInfoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+  const repoInfo = repoInfoRes.ok
+    ? (await repoInfoRes.json()) as { default_branch: string }
+    : null;
+  const base = repoInfo?.default_branch ?? "main";
 
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
     method: "POST",
