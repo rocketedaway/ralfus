@@ -216,23 +216,26 @@ export async function runClarificationJob(
   // but re-clones if /tmp was cleared after a machine restart.
   const repoPath = await ensureRepoCheckedOut(issueId);
 
-  // 2. If awaiting approval, check if the incoming message is an approval
-  if (record.state === "awaiting_approval") {
-    const messageToCheck = userMessage ?? issue.comments[issue.comments.length - 1]?.body ?? "";
-    if (isApproval(messageToCheck)) {
-      await postAgentActivity(linear, agentSessionId, `✅ Plan approved — starting work now!`);
-      await upsertIssue(issueId, organizationId, "in_progress", repoPath);
-      console.log(`[planningJob] Issue ${issueId} approved — enqueuing implementation job`);
-      getQueue().add(async () => {
-        try {
-          await runImplementationJob(issueId, organizationId, accessToken);
-        } catch (err) {
-          console.error(`[queue] Implementation job failed for issue ${issueId}:`, err);
-        }
-      });
-      return;
-    }
-    // Not an approval — treat as feedback and re-run the agent
+  // 2. Check if the incoming message is an approval — applies to both awaiting_approval
+  //    and awaiting_clarification states so that repeated "approved" replies always work.
+  //    Use || (not ??) so that an empty string falls through to the last comment body.
+  const messageToCheck =
+    userMessage?.trim() ||
+    issue.comments[issue.comments.length - 1]?.body ||
+    "";
+
+  if (isApproval(messageToCheck)) {
+    await postAgentActivity(linear, agentSessionId, `✅ Plan approved — starting work now!`);
+    await upsertIssue(issueId, organizationId, "in_progress", repoPath);
+    console.log(`[planningJob] Issue ${issueId} approved — enqueuing implementation job`);
+    getQueue().add(async () => {
+      try {
+        await runImplementationJob(issueId, organizationId, accessToken);
+      } catch (err) {
+        console.error(`[queue] Implementation job failed for issue ${issueId}:`, err);
+      }
+    });
+    return;
   }
 
   await upsertIssue(issueId, organizationId, "awaiting_clarification", repoPath);

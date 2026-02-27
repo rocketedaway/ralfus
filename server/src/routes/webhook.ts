@@ -161,7 +161,9 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
       });
     }
   } else if (action === "prompted") {
-    const userMessage = payload.agentActivity?.body ?? "";
+    // Linear may surface the user's message in either agentSession.comment.body
+    // or agentActivity.body depending on the event shape — try both.
+    const userMessage = agentSession.comment?.body || payload.agentActivity?.body || "";
     const issueId = agentSession.issue?.id;
 
     console.log("User follow-up prompt:", userMessage);

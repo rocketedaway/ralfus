@@ -10,17 +10,24 @@ export type PlanResult = {
 /**
  * Determines whether the Cursor CLI output contains clarifying questions
  * that should be sent back to the user before proceeding.
+ *
+ * Uses conservative patterns to avoid false positives. A plan that says
+ * "No remaining clarifying questions" should NOT trigger this.
  */
 function detectClarificationNeeded(output: string): boolean {
-  // Look for common markers that indicate the agent wants more information
-  const patterns = [
-    /^#{1,3}\s*(clarif|question|need more|before i|can you confirm)/im,
-    /\?\s*$/m,
-    /\bclarif(y|ication|ying)\b/i,
-    /\bneed(s)? (more )?information\b/i,
-    /\bplease (clarify|confirm|provide)\b/i,
-  ];
-  return patterns.some((re) => re.test(output));
+  // Explicit "Clarifying Questions" section heading — the most reliable signal
+  if (/^#{1,3}\s*clarify?ing\s+questions?/im.test(output)) return true;
+
+  // A standalone "## Questions" heading
+  if (/^#{1,3}\s*questions?\s*$/im.test(output)) return true;
+
+  // Numbered list of questions at the tail of the output (e.g. "1. What version?")
+  // Only count if at least one numbered item ends with "?"
+  const lines = output.trimEnd().split("\n");
+  const lastFewLines = lines.slice(-20).join("\n");
+  if (/^\d+\.\s+.+\?\s*$/m.test(lastFewLines)) return true;
+
+  return false;
 }
 
 /**
