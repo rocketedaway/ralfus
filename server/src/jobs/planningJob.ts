@@ -205,9 +205,23 @@ export async function runClarificationJob(
     return;
   }
 
-  if (record.state !== "awaiting_clarification" && record.state !== "awaiting_approval") {
+  console.log(
+    `[planningJob] Clarification received for issue ${issueId} — state="${record.state}" planCommentId=${record.planCommentId ?? "none"} userMessage="${(userMessage ?? "").slice(0, 80)}"`
+  );
+
+  // Quick check: if this looks like an approval on an "in_progress" issue that has a
+  // planCommentId, the state may be stale (set by an older code path before
+  // "awaiting_approval" was introduced). Allow it to fall through so approval is handled.
+  const quickApproval = isApproval(userMessage?.trim() ?? "");
+
+  const stateAllowed =
+    record.state === "awaiting_clarification" ||
+    record.state === "awaiting_approval" ||
+    (record.state === "in_progress" && !!record.planCommentId && quickApproval);
+
+  if (!stateAllowed) {
     console.log(
-      `[planningJob] Issue ${issueId} is in state "${record.state}", not awaiting input — ignoring`
+      `[planningJob] Issue ${issueId} is in state "${record.state}" (quickApproval=${quickApproval}, planCommentId=${record.planCommentId ?? "none"}) — not awaiting input, ignoring`
     );
     return;
   }
@@ -233,11 +247,15 @@ export async function runClarificationJob(
     issue.comments[issue.comments.length - 1]?.body ||
     "";
 
+  console.log(`[planningJob] isApproval check — messageToCheck="${messageToCheck.slice(0, 80)}" result=${isApproval(messageToCheck)}`);
+
   if (isApproval(messageToCheck)) {
+    console.log(`[planningJob] Approval detected for issue ${issueId} — transitioning to in_progress and enqueuing implementation`);
     await postAgentActivity(linear, agentSessionId, `✅ Plan approved — starting work now!`);
     await upsertIssue(issueId, organizationId, "in_progress", repoPath);
-    console.log(`[planningJob] Issue ${issueId} approved — enqueuing implementation job`);
+    console.log(`[planningJob] Issue ${issueId} state set to in_progress — enqueuing implementation job`);
     getQueue().add(async () => {
+      console.log(`[queue] Dequeuing implementation job for issue ${issueId}`);
       try {
         await runImplementationJob(issueId, organizationId, accessToken);
       } catch (err) {

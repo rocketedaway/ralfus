@@ -124,8 +124,12 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
       issue?: { id: string; title: string; description?: string };
       comment?: { body: string };
       promptContext?: string;
+      // Some Linear webhook shapes put the user's new reply here
+      prompt?: string;
     };
     agentActivity?: { body: string };
+    // Top-level comment field present on some prompted payloads
+    data?: { comment?: { body: string }; body?: string };
   };
 
   const accessToken = await getAccessToken(payload.organizationId);
@@ -161,12 +165,36 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
       });
     }
   } else if (action === "prompted") {
-    // Linear may surface the user's message in either agentSession.comment.body
-    // or agentActivity.body depending on the event shape — try both.
-    const userMessage = agentSession.comment?.body || payload.agentActivity?.body || "";
+    // Log the full payload (keys only, values truncated) to diagnose which field
+    // carries the actual user reply — the shape varies across Linear webhook versions.
+    const payloadDebug = JSON.stringify(payload, (_k, v) =>
+      typeof v === "string" && v.length > 200 ? v.slice(0, 200) + "…" : v
+    );
+    console.log(`[webhook] prompted raw payload: ${payloadDebug}`);
+
+    // Try every known location where Linear puts the user's reply text.
+    // agentSession.prompt         — newer Linear webhook shape
+    // agentSession.promptContext  — alternate field name seen in some versions
+    // payload.data?.comment?.body — top-level data envelope
+    // payload.data?.body          — bare body variant
+    // agentActivity.body          — activity envelope
+    // agentSession.comment?.body  — falls back to thread description (avoid if possible)
+    const SYSTEM_THREAD_MSG = "This thread is for an agent session with";
+    const candidates = [
+      agentSession.prompt,
+      agentSession.promptContext,
+      (payload as unknown as { data?: { comment?: { body?: string }; body?: string } }).data?.comment?.body,
+      (payload as unknown as { data?: { body?: string } }).data?.body,
+      payload.agentActivity?.body,
+      agentSession.comment?.body,
+    ];
+    const userMessage = candidates.find(
+      (c): c is string => typeof c === "string" && c.trim().length > 0 && !c.startsWith(SYSTEM_THREAD_MSG)
+    ) ?? "";
+
     const issueId = agentSession.issue?.id;
 
-    console.log("User follow-up prompt:", userMessage);
+    console.log(`[webhook] prompted — issueId=${issueId ?? "none"} sessionId=${agentSession.id} userMessage="${userMessage.slice(0, 120)}"`);
 
     await linear.createAgentActivity({
       agentSessionId: agentSession.id,
@@ -177,13 +205,17 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
     });
 
     if (issueId) {
+      console.log(`[webhook] Enqueuing clarification job for issue ${issueId}`);
       getQueue().add(async () => {
+        console.log(`[queue] Dequeuing clarification job for issue ${issueId}`);
         try {
           await runClarificationJob(issueId, payload.organizationId, accessToken, userMessage);
         } catch (err) {
           console.error(`[queue] Clarification job failed for issue ${issueId}:`, err);
         }
       });
+    } else {
+      console.warn(`[webhook] prompted event has no issueId — cannot enqueue clarification`);
     }
   }
 }
