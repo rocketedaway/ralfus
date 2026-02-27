@@ -127,7 +127,10 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
       // Some Linear webhook shapes put the user's new reply here
       prompt?: string;
     };
-    agentActivity?: { body: string };
+    agentActivity?: {
+      body?: string;
+      content?: { type: string; body: string };
+    };
     // Top-level comment field present on some prompted payloads
     data?: { comment?: { body: string }; body?: string };
   };
@@ -183,6 +186,8 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
     const candidates = [
       agentSession.prompt,
       agentSession.promptContext,
+      // The user's reply lives here in the Linear webhook shape we observe
+      payload.agentActivity?.content?.body,
       (payload as unknown as { data?: { comment?: { body?: string }; body?: string } }).data?.comment?.body,
       (payload as unknown as { data?: { body?: string } }).data?.body,
       payload.agentActivity?.body,
