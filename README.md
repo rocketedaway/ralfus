@@ -58,7 +58,7 @@ ralfus/
 - [Node.js](https://nodejs.org) v22+
 - A [Linear](https://linear.app) workspace with admin access
 - A Linear OAuth application (create one at [linear.app/settings/api/applications](https://linear.app/settings/api/applications))
-- A GitHub account with a personal access token (classic, `repo` scope)
+- A [GitHub](https://github.com) account with a personal access token (classic, `repo` scope)
 - A [Cursor](https://cursor.com) account with an API key
 - [fly.io CLI](https://fly.io/docs/hands-on/install-flyctl/) (for deployment)
 
