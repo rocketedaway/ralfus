@@ -53,7 +53,7 @@ type PullRequestReviewCommentPayload = {
   };
 };
 
-const TRIGGER_PREFIX = /^@ralfus\s+/i;
+const TRIGGER_REGEX = /@ralfus(?:-bot)?\s+(.+)/is;
 
 githubWebhookRouter.post("/", async (req: Request, res: Response) => {
   const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
@@ -85,14 +85,15 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
     if (payload.action !== "created") return;
 
     const commentBody = payload.comment.body?.trim() ?? "";
-    if (!TRIGGER_PREFIX.test(commentBody)) {
+    const reviewMatch = TRIGGER_REGEX.exec(commentBody);
+    if (!reviewMatch) {
       console.log(
-        `[github webhook] review comment on ${payload.repository.owner.login}/${payload.repository.name}#${payload.pull_request.number} by @${payload.comment.user.login} does not start with @ralfus — ignoring`
+        `[github webhook] review comment on ${payload.repository.owner.login}/${payload.repository.name}#${payload.pull_request.number} by @${payload.comment.user.login} does not mention @ralfus — ignoring`
       );
       return;
     }
 
-    const instruction = commentBody.replace(TRIGGER_PREFIX, "").trim();
+    const instruction = reviewMatch[1].trim();
     if (!instruction) {
       console.log("[github webhook] @ralfus review comment had no instruction — ignoring");
       return;
@@ -136,14 +137,15 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
   if (!payload.issue.pull_request) return;
 
   const commentBody = payload.comment.body?.trim() ?? "";
-  if (!TRIGGER_PREFIX.test(commentBody)) {
+  const issueMatch = TRIGGER_REGEX.exec(commentBody);
+  if (!issueMatch) {
     console.log(
-      `[github webhook] issue_comment on ${payload.repository.owner.login}/${payload.repository.name}#${payload.issue.number} by @${payload.comment.user.login} does not start with @ralfus — ignoring`
+      `[github webhook] issue_comment on ${payload.repository.owner.login}/${payload.repository.name}#${payload.issue.number} by @${payload.comment.user.login} does not mention @ralfus — ignoring`
     );
     return;
   }
 
-  const instruction = commentBody.replace(TRIGGER_PREFIX, "").trim();
+  const instruction = issueMatch[1].trim();
   if (!instruction) {
     console.log("[github webhook] @ralfus comment had no instruction — ignoring");
     return;
