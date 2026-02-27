@@ -83,7 +83,7 @@ export async function runImplementationJob(
   const branchName = `ralfus/${issue.identifier.toLowerCase()}`;
   console.log(`[implementationJob] Creating branch "${branchName}"`);
   await createBranch(repoPath, branchName);
-  console.log(`[implementationJob] Branch "${branchName}" created and pushed`);
+  console.log(`[implementationJob] Branch "${branchName}" created (will be pushed with first commit)`);
 
   // 5. Transition Linear ticket to In Progress and announce the branch
   await updateIssueStatus(linear, issueId, orgId, "In Progress");

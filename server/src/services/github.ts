@@ -100,24 +100,26 @@ export async function ensureRepoCheckedOut(issueId: string): Promise<string> {
 }
 
 /**
- * Creates a new git branch and pushes it to origin.
+ * Creates a new git branch locally.
+ * The branch is pushed to origin on the first commit via commitAndPush.
  */
 export async function createBranch(repoPath: string, branchName: string): Promise<void> {
   const env = getGhEnv();
   await execFileAsync("git", ["-C", repoPath, "checkout", "-b", branchName], { env });
-  await execFileAsync("git", ["-C", repoPath, "push", "-u", "origin", branchName], { env });
-  console.log(`Branch "${branchName}" created and pushed`);
+  console.log(`Branch "${branchName}" created locally`);
 }
 
 /**
  * Stages all changes, commits with the given message, and pushes to origin.
+ * Uses --set-upstream so it works even when the branch hasn't been pushed yet
+ * (e.g. freshly created branch on an empty or uninitialized remote repo).
  * Throws if there are no changes to commit.
  */
 export async function commitAndPush(repoPath: string, message: string): Promise<void> {
   const env = getGhEnv();
   await execFileAsync("git", ["-C", repoPath, "add", "-A"], { env });
   await execFileAsync("git", ["-C", repoPath, "commit", "-m", message], { env });
-  await execFileAsync("git", ["-C", repoPath, "push"], { env });
+  await execFileAsync("git", ["-C", repoPath, "push", "--set-upstream", "origin", "HEAD"], { env });
   console.log(`Committed and pushed: "${message}"`);
 }
 
