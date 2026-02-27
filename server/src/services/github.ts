@@ -285,6 +285,72 @@ export async function getGitDiff(repoPath: string): Promise<string> {
 }
 
 /**
+ * Fetches the head branch ref of a pull request.
+ * Returns the branch name (e.g. "feature/my-branch").
+ */
+export async function getPrBranch(
+  owner: string,
+  repo: string,
+  prNumber: number
+): Promise<string> {
+  const token = getGithubToken();
+  const response = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `GitHub API error fetching PR ${owner}/${repo}#${prNumber} (${response.status}): ${text}`
+    );
+  }
+
+  const data = (await response.json()) as { head: { ref: string } };
+  return data.head.ref;
+}
+
+/**
+ * Posts a comment on a pull request (or issue) via the GitHub REST API.
+ */
+export async function postPrComment(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  body: string
+): Promise<void> {
+  const token = getGithubToken();
+  const response = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      body: JSON.stringify({ body }),
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `GitHub API error posting comment on ${owner}/${repo}#${prNumber} (${response.status}): ${text}`
+    );
+  }
+
+  console.log(`[postPrComment] Comment posted on ${owner}/${repo}#${prNumber}`);
+}
+
+/**
  * Removes the local repo checkout for a given issue (optional cleanup).
  */
 export async function removeRepoCheckout(issueId: string): Promise<void> {

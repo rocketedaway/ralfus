@@ -147,3 +147,27 @@ export const msgPrAnnounce = (prUrl: string, reviewer: string): string =>
     `🌵 Gnarly work's all done! PR is up and waiting: [View PR](${prUrl}) — ${reviewer}, time to catch this wave? 🌊`,
     `🌊 All steps ripped and the PR is in the lineup: [View PR](${prUrl}) — ${reviewer}, ready to paddle out and review? 🌵`,
   ]);
+
+// ---------------------------------------------------------------------------
+// prCommentJob
+// ---------------------------------------------------------------------------
+
+export const msgPrCommentStarted = (): string =>
+  pick([
+    "🌵🏄 Gnarly request, dude — dropping in on the code now. Give me a sec to wax up and I'll be shredding through it shortly. Cowabunga!",
+    "🌊 Caught that wave! Paddling out to the code right now — hang loose while I carve it up! 🤙",
+    "🌵 Stoked on this request! Grabbing my board and charging the lineup — back with the goods shortly! 🌊",
+  ]);
+
+export const msgPrCommentDone = (hadChanges: boolean): string =>
+  hadChanges
+    ? pick([
+        "🌊 Cowabunga! Shredded through it and pushed the changes — fresh commit is on the branch, dude! 🌵",
+        "🌵 Gnarly! Carved up the code and pushed the fixes. New commit is live on the branch — catch that wave! 🤙",
+        "🌊 Ripped it clean! Changes committed and pushed to the branch. All buttered up, brah! 🌵",
+      ])
+    : pick([
+        "🌵 Took a good look and the barrel's already clean — no changes needed, dude! 🤙",
+        "🌊 Paddled all the way out and the lineup is perfect — nothing to change here! 🌵",
+        "🌵 Charged through the code and it's already fully shredded — no fixes required, brah! 🌊",
+      ]);
