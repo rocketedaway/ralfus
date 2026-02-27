@@ -16,6 +16,8 @@ import {
   getRepoWebUrl,
 } from "../services/github";
 import { runAgentMode } from "../services/cursor";
+import { getQueue } from "./queue";
+import { runCodeReviewJob } from "./codeReviewJob";
 
 type PlanStep = { stepNumber: number; text: string };
 
@@ -210,19 +212,9 @@ export async function runImplementationJob(
   }
   console.log(`[implementationJob] Pull request created: ${prUrl}`);
 
-  // 8. Transition Linear ticket to In Review
-  await updateIssueStatus(linear, issueId, orgId, "In Review");
-  console.log(`[implementationJob] Issue ${issueId} transitioned to "In Review"`);
+  // 8. Persist "reviewing" state and PR URL, then hand off to the review job
+  await upsertIssue(issueId, orgId, "reviewing", repoPath, null, null, prUrl);
+  console.log(`[implementationJob] Issue ${issueId} marked as reviewing — queuing code review job`);
 
-  // 9. Announce the PR and ping the reviewer
-  const reviewer = issue.creatorName ? `@${issue.creatorName}` : "the team";
-  await postAgentActivity(
-    linear,
-    agentSessionId,
-    `🌊 Cowabunga! All steps shredded and stoked! PR is hanging loose for review: [View PR](${prUrl}) — ${reviewer}, ready to catch this wave? 🌵`
-  );
-
-  // 10. Mark as done in the DB
-  await upsertIssue(issueId, orgId, "implemented", repoPath);
-  console.log(`[implementationJob] Issue ${issueId} marked as implemented — PR: ${prUrl}`);
+  getQueue().add(() => runCodeReviewJob(issueId, orgId, accessToken));
 }

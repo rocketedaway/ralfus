@@ -244,6 +244,47 @@ export async function createPullRequest(
 }
 
 /**
+ * Returns the full git diff between the current branch HEAD and the best
+ * available base branch (main > master > first remote branch).
+ * Fetches from origin first to ensure refs are up to date.
+ */
+export async function getGitDiff(repoPath: string): Promise<string> {
+  const env = { ...getGhEnv(), GIT_TERMINAL_PROMPT: "0" };
+
+  const { stdout: headOut } = await execFileAsync(
+    "git",
+    ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"],
+    { env }
+  );
+  const head = headOut.trim();
+
+  await execFileAsync("git", ["-C", repoPath, "fetch", "--prune", "origin"], { env }).catch(
+    (err) => console.warn(`git fetch failed (non-fatal): ${err.message}`)
+  );
+
+  const { stdout: branchListOut } = await execFileAsync(
+    "git",
+    ["-C", repoPath, "branch", "-r", "--format=%(refname:short)"],
+    { env }
+  );
+  const remoteBranches = branchListOut
+    .split("\n")
+    .map((b) => b.trim().replace(/^origin\//, ""))
+    .filter((b) => b && b !== "HEAD" && b !== head);
+
+  const preferredBases = ["main", "master"];
+  const base =
+    preferredBases.find((b) => remoteBranches.includes(b)) ?? remoteBranches[0] ?? "main";
+
+  const { stdout: diff } = await execFileAsync(
+    "git",
+    ["-C", repoPath, "diff", `origin/${base}...HEAD`],
+    { env }
+  );
+  return diff;
+}
+
+/**
  * Removes the local repo checkout for a given issue (optional cleanup).
  */
 export async function removeRepoCheckout(issueId: string): Promise<void> {
