@@ -144,3 +144,7 @@ To enable `@ralfus` comments on pull requests, configure a webhook on your GitHu
 ## Deployment
 
 See [docs/fly-setup.md](docs/fly-setup.md) for the full fly.io deployment guide.
+
+## Inspiration
+
+Ralfus was inspired by [Ralph](https://github.com/snarktank/ralph) — an autonomous AI agent loop that runs AI coding tools repeatedly until all PRD items are complete.
