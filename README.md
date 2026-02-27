@@ -1,5 +1,5 @@
 > [!WARNING]
-> **⚠️ Prototype:** This is a prototype / proof-of-concept project. It is not production-ready and is intended for experimentation and exploration only.
+> This is a prototype / proof-of-concept project. It is not production-ready and is intended for experimentation and exploration only.
 
 # Ralfus
 
