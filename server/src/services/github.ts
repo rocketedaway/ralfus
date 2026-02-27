@@ -145,6 +145,16 @@ export async function createBranch(repoPath: string, branchName: string): Promis
 export async function commitAndPush(repoPath: string, message: string): Promise<void> {
   const env = getGhEnv();
   await execFileAsync("git", ["-C", repoPath, "add", "-A"], { env });
+
+  // Check if there is anything staged before committing
+  const { stdout: statusOut } = await execFileAsync(
+    "git", ["-C", repoPath, "status", "--porcelain"], { env }
+  );
+  if (!statusOut.trim()) {
+    console.log(`commitAndPush: nothing to commit for "${message}" — skipping`);
+    return;
+  }
+
   await execFileAsync("git", [
     "-C", repoPath,
     "-c", "user.email=ralfus@ralfus.app",
