@@ -109,7 +109,7 @@ oauthRouter.get("/callback", async (req: Request, res: Response) => {
 
     await upsertWorkspace(organizationId, access_token, refresh_token ?? null, expiresAt);
     console.log(
-      `Workspace ${organizationId} installed` +
+      `[oauth] Workspace ${organizationId} installed` +
       (refresh_token ? " (refresh token stored)" : " (no refresh token — long-lived token)")
     );
 
@@ -117,10 +117,10 @@ oauthRouter.get("/callback", async (req: Request, res: Response) => {
   } catch (err) {
     if (axios.isAxiosError(err)) {
       console.error(
-        `Token exchange failed: ${err.response?.status} ${err.response?.statusText} — ${JSON.stringify(err.response?.data)}`
+        `[oauth] Token exchange failed: ${err.response?.status} ${err.response?.statusText} — ${JSON.stringify(err.response?.data)}`
       );
     } else {
-      console.error("Token exchange failed:", err);
+      console.error("[oauth] Token exchange failed:", err);
     }
     res.status(500).json({ error: "Token exchange failed" });
   }

@@ -82,7 +82,10 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
       return;
     }
 
-    if (payload.action !== "created") return;
+    if (payload.action !== "created") {
+      console.log(`[github webhook] pull_request_review_comment action="${payload.action}" — ignoring`);
+      return;
+    }
 
     const commentBody = payload.comment.body?.trim() ?? "";
     const reviewMatch = TRIGGER_REGEX.exec(commentBody);
@@ -120,7 +123,10 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
     return;
   }
 
-  if (event !== "issue_comment") return;
+  if (event !== "issue_comment") {
+    console.log(`[github webhook] Unhandled event="${event ?? "(none)"}" — ignoring`);
+    return;
+  }
 
   let payload: IssueCommentPayload;
   try {
@@ -131,10 +137,18 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
   }
 
   // Only handle newly created comments
-  if (payload.action !== "created") return;
+  if (payload.action !== "created") {
+    console.log(`[github webhook] issue_comment action="${payload.action}" — ignoring`);
+    return;
+  }
 
   // Only handle comments on PRs (not plain issues)
-  if (!payload.issue.pull_request) return;
+  if (!payload.issue.pull_request) {
+    console.log(
+      `[github webhook] issue_comment on ${payload.repository.owner.login}/${payload.repository.name}#${payload.issue.number} is on a plain issue, not a PR — ignoring`
+    );
+    return;
+  }
 
   const commentBody = payload.comment.body?.trim() ?? "";
   const issueMatch = TRIGGER_REGEX.exec(commentBody);

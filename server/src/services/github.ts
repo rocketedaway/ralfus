@@ -66,7 +66,7 @@ export async function ensureRepoCheckedOut(issueId: string): Promise<string> {
   const repoPath = path.join(workDir, issueId);
 
   if (fs.existsSync(path.join(repoPath, ".git"))) {
-    console.log(`Repo already checked out at ${repoPath}, reusing`);
+    console.log(`[github] Repo already checked out at ${repoPath}, reusing`);
     const env = { ...getGhEnv(), GIT_TERMINAL_PROMPT: "0" };
     // Ensure the remote URL always has a fresh token embedded so pull doesn't
     // hit an auth prompt or stale credential.
@@ -76,18 +76,18 @@ export async function ensureRepoCheckedOut(issueId: string): Promise<string> {
       ["-C", repoPath, "remote", "set-url", "origin", authenticatedUrl],
       { env }
     ).catch((err) => {
-      console.warn(`git remote set-url failed (non-fatal): ${err.message}`);
+      console.warn(`[github] git remote set-url failed (non-fatal): ${err.message}`);
     });
     await execFileAsync("git", ["-C", repoPath, "pull", "--ff-only"], {
       env,
     }).catch((err) => {
-      console.warn(`git pull failed (non-fatal): ${err.message}`);
+      console.warn(`[github] git pull failed (non-fatal): ${err.message}`);
     });
     return repoPath;
   }
 
   const repoUrl = getRepoUrl();
-  console.log(`Cloning ${repoUrl} into ${repoPath}`);
+  console.log(`[github] Cloning ${repoUrl} into ${repoPath}`);
 
   fs.mkdirSync(workDir, { recursive: true });
 
@@ -95,7 +95,7 @@ export async function ensureRepoCheckedOut(issueId: string): Promise<string> {
     env: getGhEnv(),
   });
 
-  console.log(`Repo cloned to ${repoPath}`);
+  console.log(`[github] Repo cloned to ${repoPath}`);
   return repoPath;
 }
 
@@ -110,7 +110,7 @@ export async function createBranch(repoPath: string, branchName: string): Promis
   // 1. Try switching to an existing local branch
   try {
     await execFileAsync("git", ["-C", repoPath, "checkout", branchName], { env });
-    console.log(`Branch "${branchName}" already exists locally — switched to it`);
+    console.log(`[github] Branch "${branchName}" already exists locally — switched to it`);
     return false;
   } catch {
     // not a local branch — fall through
@@ -124,7 +124,7 @@ export async function createBranch(repoPath: string, branchName: string): Promis
       ["-C", repoPath, "checkout", "--track", `origin/${branchName}`],
       { env }
     );
-    console.log(`Branch "${branchName}" fetched from remote and checked out`);
+    console.log(`[github] Branch "${branchName}" fetched from remote and checked out`);
     return false;
   } catch {
     // not on remote either — fall through
@@ -132,7 +132,7 @@ export async function createBranch(repoPath: string, branchName: string): Promis
 
   // 3. Create a fresh branch
   await execFileAsync("git", ["-C", repoPath, "checkout", "-b", branchName], { env });
-  console.log(`Branch "${branchName}" created locally`);
+  console.log(`[github] Branch "${branchName}" created locally`);
   return true;
 }
 
@@ -151,7 +151,7 @@ export async function commitAndPush(repoPath: string, message: string): Promise<
     "git", ["-C", repoPath, "status", "--porcelain"], { env }
   );
   if (!statusOut.trim()) {
-    console.log(`commitAndPush: nothing to commit for "${message}" — skipping`);
+    console.log(`[github] commitAndPush: nothing to commit for "${message}" — skipping`);
     return;
   }
 
@@ -163,7 +163,7 @@ export async function commitAndPush(repoPath: string, message: string): Promise<
     "-m", message,
   ], { env });
   await execFileAsync("git", ["-C", repoPath, "push", "--set-upstream", "origin", "HEAD"], { env });
-  console.log(`Committed and pushed: "${message}"`);
+  console.log(`[github] Committed and pushed: "${message}"`);
 }
 
 /**
@@ -239,7 +239,7 @@ export async function createPullRequest(
 
   const data = (await response.json()) as { html_url: string };
   const prUrl = data.html_url;
-  console.log(`Pull request created: ${prUrl}`);
+  console.log(`[github] Pull request created: ${prUrl}`);
   return prUrl;
 }
 
@@ -259,7 +259,7 @@ export async function getGitDiff(repoPath: string): Promise<string> {
   const head = headOut.trim();
 
   await execFileAsync("git", ["-C", repoPath, "fetch", "--prune", "origin"], { env }).catch(
-    (err) => console.warn(`git fetch failed (non-fatal): ${err.message}`)
+    (err) => console.warn(`[github] git fetch failed (non-fatal): ${err.message}`)
   );
 
   const { stdout: branchListOut } = await execFileAsync(
@@ -359,6 +359,6 @@ export async function removeRepoCheckout(issueId: string): Promise<void> {
 
   if (fs.existsSync(repoPath)) {
     fs.rmSync(repoPath, { recursive: true, force: true });
-    console.log(`Removed repo checkout at ${repoPath}`);
+    console.log(`[github] Removed repo checkout at ${repoPath}`);
   }
 }

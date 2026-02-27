@@ -9,7 +9,7 @@ export function getQueue(): PQueue {
   _queue = new PQueue({ concurrency });
 
   _queue.on("error", (err) => {
-    console.error("Job queue error:", err);
+    console.error("[queue] Job queue error:", err);
   });
 
   console.log(`Job queue initialized (concurrency: ${concurrency})`);

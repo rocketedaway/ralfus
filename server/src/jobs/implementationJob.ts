@@ -200,5 +200,12 @@ export async function runImplementationJob(
   await upsertIssue(issueId, orgId, "reviewing", repoPath, null, null, prUrl);
   console.log(`[implementationJob] Issue ${issueId} marked as reviewing — queuing code review job`);
 
-  getQueue().add(() => runCodeReviewJob(issueId, orgId, accessToken));
+  getQueue().add(async () => {
+    console.log(`[queue] Dequeuing code review job for issue ${issueId}`);
+    try {
+      await runCodeReviewJob(issueId, orgId, accessToken);
+    } catch (err) {
+      console.error(`[queue] Code review job failed for issue ${issueId}:`, err);
+    }
+  });
 }

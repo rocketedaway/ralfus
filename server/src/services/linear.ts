@@ -119,7 +119,7 @@ export async function updateIssueStatus(
   const issue = await linear.issue(issueId);
   const team = await issue.team;
   if (!team) {
-    console.warn(`No team found for issue ${issueId}, skipping status update`);
+    console.warn(`[linear] No team found for issue ${issueId}, skipping status update`);
     return;
   }
 
@@ -130,11 +130,11 @@ export async function updateIssueStatus(
 
   if (!targetState) {
     console.warn(
-      `Status "${targetStateName}" not found for team ${team.id}. Available: ${statesPage.nodes.map((s) => s.name).join(", ")}`
+      `[linear] Status "${targetStateName}" not found for team ${team.id}. Available: ${statesPage.nodes.map((s) => s.name).join(", ")}`
     );
     return;
   }
 
   await linear.updateIssue(issueId, { stateId: targetState.id });
-  console.log(`Issue ${issueId} status updated to "${targetState.name}"`);
+  console.log(`[linear] Issue ${issueId} status updated to "${targetState.name}"`);
 }

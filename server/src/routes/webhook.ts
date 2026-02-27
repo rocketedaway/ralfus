@@ -47,7 +47,7 @@ webhookRouter.post("/", async (req: Request, res: Response) => {
   try {
     await handleWebhook(payload);
   } catch (err) {
-    console.error("Error handling webhook:", err);
+    console.error("[linear webhook] Error handling webhook:", err);
   }
 });
 
@@ -61,7 +61,7 @@ type WebhookPayload = {
 
 async function handleWebhook(payload: WebhookPayload): Promise<void> {
   const { type, action } = payload;
-  console.log(`Webhook received: type=${type} action=${action}`);
+  console.log(`[linear webhook] Received type=${type} action=${action}`);
 
   if (type === "AgentSessionEvent") {
     await handleAgentSession(payload);
@@ -72,6 +72,8 @@ async function handleWebhook(payload: WebhookPayload): Promise<void> {
     await handleIssueUpdate(payload);
     return;
   }
+
+  console.log(`[linear webhook] Unhandled event type="${type}" action="${action}" — ignoring`);
 }
 
 type IssueUpdatePayload = WebhookPayload & {
@@ -90,20 +92,26 @@ async function handleIssueUpdate(payload: WebhookPayload): Promise<void> {
   const { data, updatedFrom } = payload as IssueUpdatePayload;
 
   const assigneeChanged = updatedFrom?.assigneeId !== data?.assigneeId && data?.assigneeId;
-  if (!assigneeChanged) return;
+  if (!assigneeChanged) {
+    console.log(`[linear webhook] Issue update for ${data?.id} — assignee unchanged, ignoring`);
+    return;
+  }
 
   const accessToken = await getAccessToken(payload.organizationId);
   if (!accessToken) {
-    console.error(`No access token found for organization ${payload.organizationId}`);
+    console.error(`[linear webhook] No access token found for organization ${payload.organizationId}`);
     return;
   }
 
   const linear = new LinearClient({ accessToken });
   const viewer = await linear.viewer;
 
-  if (data.assigneeId !== viewer.id) return;
+  if (data.assigneeId !== viewer.id) {
+    console.log(`[linear webhook] Issue ${data.id} assigned to someone else (${data.assigneeId}) — ignoring`);
+    return;
+  }
 
-  console.log(`Agent assigned to issue: ${data.id} — "${data.title}"`);
+  console.log(`[linear webhook] Agent assigned to issue: ${data.id} — "${data.title}"`);
 
   // Enqueue the initial planning job
   getQueue().add(async () => {
@@ -137,11 +145,16 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
 
   const accessToken = await getAccessToken(payload.organizationId);
   if (!accessToken) {
-    console.error(`No access token found for organization ${payload.organizationId}`);
+    console.error(`[linear webhook] No access token found for organization ${payload.organizationId}`);
     return;
   }
 
   const linear = new LinearClient({ accessToken });
+
+  if (action !== "created" && action !== "prompted") {
+    console.log(`[linear webhook] Unhandled AgentSessionEvent action="${action}" for session ${agentSession.id} — ignoring`);
+    return;
+  }
 
   if (action === "created") {
     try {
@@ -160,16 +173,16 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
       );
       if (isAuthError) {
         console.error(
-          `[webhook] 401 posting greeting activity for session ${agentSession.id} — ` +
+          `[linear webhook] 401 posting greeting activity for session ${agentSession.id} — ` +
           `the Linear OAuth token may be stale. Re-authorize at /oauth/authorize to refresh it.`
         );
       } else {
-        console.error(`[webhook] Failed to post greeting activity for session ${agentSession.id}:`, err);
+        console.error(`[linear webhook] Failed to post greeting activity for session ${agentSession.id}:`, err);
       }
     }
 
-    console.log("Agent session created:", agentSession.id);
-    console.log("Prompt context:", agentSession.promptContext);
+    console.log(`[linear webhook] Agent session created: ${agentSession.id}`);
+    console.log(`[linear webhook] Prompt context: ${agentSession.promptContext}`);
 
     if (agentSession.issue?.id) {
       // Persist the agentSessionId so planning jobs can post back to this thread
@@ -189,7 +202,7 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
     const payloadDebug = JSON.stringify(payload, (_k, v) =>
       typeof v === "string" && v.length > 200 ? v.slice(0, 200) + "…" : v
     );
-    console.log(`[webhook] prompted raw payload: ${payloadDebug}`);
+    console.log(`[linear webhook] prompted raw payload: ${payloadDebug}`);
 
     // Try every known location where Linear puts the user's reply text.
     // agentSession.prompt         — newer Linear webhook shape
@@ -215,7 +228,7 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
 
     const issueId = agentSession.issue?.id;
 
-    console.log(`[webhook] prompted — issueId=${issueId ?? "none"} sessionId=${agentSession.id} userMessage="${userMessage.slice(0, 120)}"`);
+    console.log(`[linear webhook] prompted — issueId=${issueId ?? "none"} sessionId=${agentSession.id} userMessage="${userMessage.slice(0, 120)}"`);
 
     try {
       await linear.createAgentActivity({
@@ -233,17 +246,17 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
       );
       if (isAuthError) {
         console.error(
-          `[webhook] 401 posting thought activity for session ${agentSession.id} — ` +
+          `[linear webhook] 401 posting thought activity for session ${agentSession.id} — ` +
           `the Linear OAuth token may be stale. Re-authorize at /oauth/authorize to refresh it.`
         );
       } else {
-        console.error(`[webhook] Failed to post thought activity for session ${agentSession.id}:`, err);
+        console.error(`[linear webhook] Failed to post thought activity for session ${agentSession.id}:`, err);
       }
       // Don't bail — continue to enqueue the clarification job even if the thought fails
     }
 
     if (issueId) {
-      console.log(`[webhook] Enqueuing clarification job for issue ${issueId}`);
+      console.log(`[linear webhook] Enqueuing clarification job for issue ${issueId}`);
       getQueue().add(async () => {
         console.log(`[queue] Dequeuing clarification job for issue ${issueId}`);
         try {
@@ -253,7 +266,7 @@ async function handleAgentSession(payload: WebhookPayload): Promise<void> {
         }
       });
     } else {
-      console.warn(`[webhook] prompted event has no issueId — cannot enqueue clarification`);
+      console.warn(`[linear webhook] prompted event has no issueId — cannot enqueue clarification`);
     }
   }
 }
