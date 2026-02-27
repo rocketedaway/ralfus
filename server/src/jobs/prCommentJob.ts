@@ -7,9 +7,20 @@ import {
   getGitDiff,
   getPrBranch,
   postPrComment,
+  replyToReviewComment,
 } from "../services/github";
 import { runAgentMode } from "../services/cursor";
 import { msgPrCommentStarted, msgPrCommentDone } from "./messages";
+
+/**
+ * Describes where the @ralfus mention came from so replies are posted in the
+ * right location:
+ *  - "inline": a pull_request_review_comment — reply threads under the line
+ *  - "issue":  an issue_comment on the PR — quote + reply in the PR body
+ */
+export type PrReplyContext =
+  | { type: "inline"; commentId: number }
+  | { type: "issue"; originalBody: string };
 
 const execFileAsync = promisify(execFile);
 
@@ -24,26 +35,51 @@ function prKey(owner: string, repo: string, prNumber: number): string {
 }
 
 /**
- * Handles a /ralfus comment on a GitHub PR:
+ * Posts a reply in the right location based on where the @ralfus mention came from.
+ * Inline review comments thread under the original line; issue comments quote the
+ * original text and post to the PR conversation.
+ */
+async function postReply(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  replyContext: PrReplyContext,
+  body: string
+): Promise<void> {
+  if (replyContext.type === "inline") {
+    await replyToReviewComment(owner, repo, prNumber, replyContext.commentId, body);
+  } else {
+    const quoted = replyContext.originalBody
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+    await postPrComment(owner, repo, prNumber, `${quoted}\n\n${body}`);
+  }
+}
+
+/**
+ * Handles a @ralfus comment on a GitHub PR:
  *  1. Checks out the PR's head branch
  *  2. Runs Cursor agent with the instruction as the prompt
  *  3. Commits and pushes any changes
- *  4. Replies on the PR with a summary
+ *  4. Replies in the same location as the original comment
  */
 export async function runPrCommentJob(
   owner: string,
   repo: string,
   prNumber: number,
-  instruction: string
+  instruction: string,
+  replyContext: PrReplyContext
 ): Promise<void> {
   const key = prKey(owner, repo, prNumber);
 
   if (activePrs.has(key)) {
     console.log(`[prCommentJob] Already processing ${key} — posting busy reply`);
-    await postPrComment(
+    await postReply(
       owner,
       repo,
       prNumber,
+      replyContext,
       "🌊 Hang loose — I'm still shredding through the previous request on this PR. Try again once that wave has rolled in! 🌵"
     ).catch((err) =>
       console.error(`[prCommentJob] Failed to post busy reply on ${key}:`, err)
@@ -56,7 +92,7 @@ export async function runPrCommentJob(
 
   try {
     // 1. Acknowledge the comment immediately
-    await postPrComment(owner, repo, prNumber, msgPrCommentStarted()).catch(
+    await postReply(owner, repo, prNumber, replyContext, msgPrCommentStarted()).catch(
       (err) => console.warn(`[prCommentJob] Failed to post started comment on ${key}:`, err)
     );
 
@@ -120,15 +156,16 @@ export async function runPrCommentJob(
     );
     const hadChanges = afterShaOut.trim() !== beforeSha;
 
-    // 11. Reply on the PR
-    await postPrComment(owner, repo, prNumber, msgPrCommentDone(hadChanges));
+    // 11. Reply in the same location as the original comment
+    await postReply(owner, repo, prNumber, replyContext, msgPrCommentDone(hadChanges));
     console.log(`[prCommentJob] Done for ${key} (hadChanges=${hadChanges})`);
   } catch (err) {
     console.error(`[prCommentJob] Error processing ${key}:`, err);
-    await postPrComment(
+    await postReply(
       owner,
       repo,
       prNumber,
+      replyContext,
       `🌵 Wiped out on that one! Hit an error while processing your request. Check the server logs for the full damage report.\n\n\`\`\`\n${err}\n\`\`\``
     ).catch((postErr) =>
       console.error(`[prCommentJob] Failed to post error reply on ${key}:`, postErr)

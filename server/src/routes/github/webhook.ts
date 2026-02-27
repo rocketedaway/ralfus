@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import crypto from "crypto";
 import { getQueue } from "../../jobs/queue";
-import { runPrCommentJob } from "../../jobs/prCommentJob";
+import { runPrCommentJob, PrReplyContext } from "../../jobs/prCommentJob";
 
 export const githubWebhookRouter = Router();
 
@@ -105,6 +105,7 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
     const owner = payload.repository.owner.login;
     const repo = payload.repository.name;
     const prNumber = payload.pull_request.number;
+    const replyContext: PrReplyContext = { type: "inline", commentId: payload.comment.id };
 
     console.log(
       `[github webhook] Enqueuing prCommentJob (review comment) — ${owner}/${repo}#${prNumber} by @${payload.comment.user.login}: "${instruction.slice(0, 80)}"`
@@ -112,7 +113,7 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
 
     getQueue().add(async () => {
       try {
-        await runPrCommentJob(owner, repo, prNumber, instruction);
+        await runPrCommentJob(owner, repo, prNumber, instruction, replyContext);
       } catch (err) {
         console.error(
           `[queue] prCommentJob failed for ${owner}/${repo}#${prNumber}:`,
@@ -168,6 +169,7 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
   const owner = payload.repository.owner.login;
   const repo = payload.repository.name;
   const prNumber = payload.issue.number;
+  const replyContext: PrReplyContext = { type: "issue", originalBody: payload.comment.body };
 
   console.log(
     `[github webhook] Enqueuing prCommentJob — ${owner}/${repo}#${prNumber} by @${payload.comment.user.login}: "${instruction.slice(0, 80)}"`
@@ -175,7 +177,7 @@ githubWebhookRouter.post("/", async (req: Request, res: Response) => {
 
   getQueue().add(async () => {
     try {
-      await runPrCommentJob(owner, repo, prNumber, instruction);
+      await runPrCommentJob(owner, repo, prNumber, instruction, replyContext);
     } catch (err) {
       console.error(
         `[queue] prCommentJob failed for ${owner}/${repo}#${prNumber}:`,

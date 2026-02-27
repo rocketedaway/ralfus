@@ -351,6 +351,43 @@ export async function postPrComment(
 }
 
 /**
+ * Replies inline to a pull request review comment via the GitHub REST API.
+ * Uses the review comment reply endpoint so the response threads under the
+ * original inline comment rather than appearing in the PR conversation.
+ */
+export async function replyToReviewComment(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  commentId: number,
+  body: string
+): Promise<void> {
+  const token = getGithubToken();
+  const response = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/comments/${commentId}/replies`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      body: JSON.stringify({ body }),
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `GitHub API error replying to review comment ${commentId} on ${owner}/${repo}#${prNumber} (${response.status}): ${text}`
+    );
+  }
+
+  console.log(`[replyToReviewComment] Reply posted to comment ${commentId} on ${owner}/${repo}#${prNumber}`);
+}
+
+/**
  * Removes the local repo checkout for a given issue (optional cleanup).
  */
 export async function removeRepoCheckout(issueId: string): Promise<void> {
