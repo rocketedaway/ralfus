@@ -204,7 +204,7 @@ export async function runImplementationJob(
     await postAgentActivity(
       linear,
       agentSessionId,
-      `⚠️ All steps are done but the PR couldn't be created: ${msg}`
+      `🌵 Gnarly wipeout at the finish line! Shredded all the steps but wiped out creating the PR, dude: ${msg}`
     );
     return;
   }
