@@ -1,5 +1,7 @@
 # Ralfus
 
+> **⚠️ Prototype:** This is a prototype / proof-of-concept project. It is not production-ready and is intended for experimentation and exploration only.
+
 A [Linear Agent](https://linear.app/developers/agents) server built with Node.js, Express, and TypeScript, deployed on [fly.io](https://fly.io).
 
 ## Overview
