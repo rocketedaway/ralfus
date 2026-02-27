@@ -11,6 +11,7 @@ import {
 } from "../services/linear";
 import { getGitDiff, commitAndPush } from "../services/github";
 import { runAgentMode } from "../services/cursor";
+import { msgReviewStarting, msgReviewHadFixes, msgReviewClean, msgPrAnnounce } from "./messages";
 
 const execFileAsync = promisify(execFile);
 
@@ -32,11 +33,7 @@ export async function runCodeReviewJob(
   if (!prUrl) throw new Error(`[codeReviewJob] No prUrl for issue ${issueId}`);
 
   // 1. Announce the review has started
-  await postAgentActivity(
-    linear,
-    agentSessionId,
-    "🌵 Hold up — gonna do a gnarly self-review before I paddle this wave over to the reviewer… dropping back in on the code now! 🏄"
-  );
+  await postAgentActivity(linear, agentSessionId, msgReviewStarting());
 
   // 2. Gather context: issue details, approved plan, and git diff
   const issue = await fetchIssueWithComments(linear, issueId);
@@ -99,13 +96,7 @@ export async function runCodeReviewJob(
   );
   const hadFixes = afterShaOut.trim() !== beforeSha;
 
-  await postAgentActivity(
-    linear,
-    agentSessionId,
-    hadFixes
-      ? "🌵 Cowabunga! Found a few gnarly bits and patched 'em up — fixes are pushed and the code is fully shredded! 🤙"
-      : "🌵 Stoked! Reviewed the whole set and it's totally clean — no wipeouts detected, dude! 🤙"
-  );
+  await postAgentActivity(linear, agentSessionId, hadFixes ? msgReviewHadFixes() : msgReviewClean());
 
   // 8. Transition Linear ticket to In Review
   await updateIssueStatus(linear, issueId, orgId, "In Review");
@@ -113,11 +104,7 @@ export async function runCodeReviewJob(
 
   // 9. Announce the PR and ping the reviewer
   const reviewer = issue.creatorName ? `@${issue.creatorName}` : "the team";
-  await postAgentActivity(
-    linear,
-    agentSessionId,
-    `🌊 Cowabunga! All steps shredded and stoked! PR is hanging loose for review: [View PR](${prUrl}) — ${reviewer}, ready to catch this wave? 🌵`
-  );
+  await postAgentActivity(linear, agentSessionId, msgPrAnnounce(prUrl, reviewer));
 
   // 10. Mark as implemented in the DB
   await upsertIssue(issueId, orgId, "implemented", repoPath, null, null, prUrl);

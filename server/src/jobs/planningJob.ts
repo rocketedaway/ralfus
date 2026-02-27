@@ -11,6 +11,15 @@ import { ensureRepoCheckedOut } from "../services/github";
 import { runPlanMode } from "../services/cursor";
 import { getQueue } from "./queue";
 import { runImplementationJob } from "./implementationJob";
+import {
+  msgRepoCheckoutFailed,
+  msgCursorPlanFailed,
+  msgCursorClarificationFailed,
+  msgClarificationNeeded,
+  msgMoreClarificationNeeded,
+  msgPlanApprovalCta,
+  msgApprovalReceived,
+} from "./messages";
 
 // ---------------------------------------------------------------------------
 // Prompt builders
@@ -104,7 +113,7 @@ async function postPlanAndAwaitApproval(
   await postAgentActivity(
     linear,
     agentSessionId,
-    `## Implementation Plan\n\n${checkboxPlan}\n\n---\n_Stoked on this plan? Reply **approved** to drop in and start shredding, or send some feedback and I'll tweak the lines. 🌵_`
+    `## Implementation Plan\n\n${checkboxPlan}\n\n---\n${msgPlanApprovalCta()}`
   );
 }
 
@@ -147,11 +156,7 @@ export async function runInitialPlanningJob(
     repoPath = await ensureRepoCheckedOut(issueId);
   } catch (err) {
     console.error(`[planningJob] Failed to checkout repo: ${err}`);
-    await postAgentActivity(
-      linear,
-      agentSessionId,
-      `🌵 Gnarly wipeout! Couldn't check out the repo. Make sure \`GITHUB_REPO_URL\` and \`GITHUB_TOKEN\` are dialed in, dude.\n\n\`\`\`\n${err}\n\`\`\``
-    );
+    await postAgentActivity(linear, agentSessionId, msgRepoCheckoutFailed(err));
     return;
   }
 
@@ -165,18 +170,13 @@ export async function runInitialPlanningJob(
     planResult = await runPlanMode(prompt, repoPath);
   } catch (err) {
     console.error(`[planningJob] Cursor CLI failed: ${err}`);
-    await postAgentActivity(
-      linear,
-      agentSessionId,
-      `🌵 Hit a gnarly wipeout while cooking up the plan. Peep the server logs for the full damage report.\n\n\`\`\`\n${err}\n\`\`\``
-    );
+    await postAgentActivity(linear, agentSessionId, msgCursorPlanFailed(err));
     return;
   }
 
   // 4. Post the plan and always wait for user confirmation
   if (planResult.needsClarification) {
-    const body = `## Implementation Plan (Draft)\n\nStoked to paddle out on this one! Got the vibes flowing but need a few answers before I can lock in the plan. 🏄\n\n${planResult.raw}\n\n---\n_Drop your answers and I'll ride that wave to a finalized plan. 🌵_`;
-    await postAgentActivity(linear, agentSessionId, body);
+    await postAgentActivity(linear, agentSessionId, msgClarificationNeeded(planResult.raw));
     await upsertIssue(issueId, organizationId, "awaiting_clarification", repoPath);
     console.log(`[planningJob] Plan posted with clarifying questions for issue ${issueId}`);
   } else {
@@ -253,7 +253,7 @@ export async function runClarificationJob(
 
   if (isApproval(messageToCheck)) {
     console.log(`[planningJob] Approval detected for issue ${issueId} — transitioning to in_progress and enqueuing implementation`);
-    await postAgentActivity(linear, agentSessionId, `🤙 Rad! Plan approved — dropping in and shredding code now! 🌊`);
+    await postAgentActivity(linear, agentSessionId, msgApprovalReceived());
     await upsertIssue(issueId, organizationId, "in_progress", repoPath);
     console.log(`[planningJob] Issue ${issueId} state set to in_progress — enqueuing implementation job`);
     getQueue().add(async () => {
@@ -287,18 +287,13 @@ export async function runClarificationJob(
     planResult = await runPlanMode(prompt, repoPath);
   } catch (err) {
     console.error(`[planningJob] Cursor CLI failed on clarification: ${err}`);
-    await postAgentActivity(
-      linear,
-      agentSessionId,
-      `🌵 Wipeout while updating the plan. Check the server logs for the full lowdown.\n\n\`\`\`\n${err}\n\`\`\``
-    );
+    await postAgentActivity(linear, agentSessionId, msgCursorClarificationFailed(err));
     return;
   }
 
   // 4. Post updated plan — always require approval again
   if (planResult.needsClarification) {
-    const body = `## Updated Implementation Plan\n\nSick, thanks for the intel! Still got a couple of gnarly questions before I can hang ten on this plan:\n\n${planResult.raw}\n\n---\n_Send it back and I'll paddle to a fully-locked plan. 🌵_`;
-    await postAgentActivity(linear, agentSessionId, body);
+    await postAgentActivity(linear, agentSessionId, msgMoreClarificationNeeded(planResult.raw));
     await upsertIssue(issueId, organizationId, "awaiting_clarification", repoPath);
     console.log(`[planningJob] Updated plan with remaining questions for issue ${issueId}`);
   } else {

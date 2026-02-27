@@ -18,6 +18,14 @@ import {
 import { runAgentMode } from "../services/cursor";
 import { getQueue } from "./queue";
 import { runCodeReviewJob } from "./codeReviewJob";
+import {
+  msgNoStepsFound,
+  msgNewBranch,
+  msgResumeBranch,
+  msgStartingStep,
+  msgStepComplete,
+  msgPrCreationFailed,
+} from "./messages";
 
 type PlanStep = { stepNumber: number; text: string };
 
@@ -82,11 +90,7 @@ export async function runImplementationJob(
 
   if (steps.length === 0 && checkedSteps.length === 0) {
     console.warn(`[implementationJob] No steps found in plan comment for issue ${issueId}`);
-    await postAgentActivity(
-      linear,
-      agentSessionId,
-      "🌵 Bummer, dude — no unchecked steps found in the plan comment. Wiped out before we even paddled in. Implementation cancelled."
-    );
+    await postAgentActivity(linear, agentSessionId, msgNoStepsFound());
     return;
   }
 
@@ -111,18 +115,10 @@ export async function runImplementationJob(
   await updateIssueStatus(linear, issueId, orgId, "In Progress");
   const branchUrl = `${getRepoWebUrl()}/tree/${branchName}`;
   if (branchWasCreated) {
-    await postAgentActivity(
-      linear,
-      agentSessionId,
-      `🌵 Fresh branch planted: [${branchName}](${branchUrl}) — dropping in and shredding code now! 🏄`
-    );
+    await postAgentActivity(linear, agentSessionId, msgNewBranch(branchName, branchUrl));
   } else {
     const resumeFromStep = steps.length > 0 ? steps[0].stepNumber : "PR creation";
-    await postAgentActivity(
-      linear,
-      agentSessionId,
-      `🌵 Paddling back out on [${branchName}](${branchUrl}) — resuming from Step ${resumeFromStep}. Cowabunga! 🏄`
-    );
+    await postAgentActivity(linear, agentSessionId, msgResumeBranch(branchName, branchUrl, resumeFromStep));
   }
 
   // 6. Implement each step, committing after each one (skipped if all already done)
@@ -131,11 +127,7 @@ export async function runImplementationJob(
     const stepLabel = `Step ${step.stepNumber}: ${step.text}`;
     console.log(`[implementationJob] [${i + 1}/${steps.length}] Running cursor-agent for: ${stepLabel}`);
 
-    await postAgentActivity(
-      linear,
-      agentSessionId,
-      `🌊 Dropping in on step ${step.stepNumber}/${steps.length}: ${step.text}…`
-    );
+    await postAgentActivity(linear, agentSessionId, msgStartingStep(step.stepNumber, steps.length, step.text));
 
     const prompt = [
       "You are a software engineer implementing a feature step by step.",
@@ -172,11 +164,7 @@ export async function runImplementationJob(
     await updateComment(linear, planCommentId, currentCommentBody);
     console.log(`[implementationJob] [${i + 1}/${steps.length}] Checked off step ${step.stepNumber} in Linear`);
 
-    await postAgentActivity(
-      linear,
-      agentSessionId,
-      `✅ Shredded step ${step.stepNumber}/${steps.length}: ${step.text} 🤙`
-    );
+    await postAgentActivity(linear, agentSessionId, msgStepComplete(step.stepNumber, steps.length, step.text));
   }
 
   // 7. Create the pull request
@@ -203,11 +191,7 @@ export async function runImplementationJob(
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[implementationJob] PR creation failed: ${msg}`);
-    await postAgentActivity(
-      linear,
-      agentSessionId,
-      `🌵 Gnarly wipeout at the finish line! Shredded all the steps but wiped out creating the PR, dude: ${msg}`
-    );
+    await postAgentActivity(linear, agentSessionId, msgPrCreationFailed(msg));
     return;
   }
   console.log(`[implementationJob] Pull request created: ${prUrl}`);
