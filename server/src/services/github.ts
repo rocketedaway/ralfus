@@ -100,13 +100,40 @@ export async function ensureRepoCheckedOut(issueId: string): Promise<string> {
 }
 
 /**
- * Creates a new git branch locally.
+ * Switches to the given branch if it already exists (locally or on remote),
+ * otherwise creates it. Returns true if the branch was freshly created.
  * The branch is pushed to origin on the first commit via commitAndPush.
  */
-export async function createBranch(repoPath: string, branchName: string): Promise<void> {
+export async function createBranch(repoPath: string, branchName: string): Promise<boolean> {
   const env = getGhEnv();
+
+  // 1. Try switching to an existing local branch
+  try {
+    await execFileAsync("git", ["-C", repoPath, "checkout", branchName], { env });
+    console.log(`Branch "${branchName}" already exists locally — switched to it`);
+    return false;
+  } catch {
+    // not a local branch — fall through
+  }
+
+  // 2. Try fetching + tracking the branch from the remote
+  try {
+    await execFileAsync("git", ["-C", repoPath, "fetch", "origin", branchName], { env });
+    await execFileAsync(
+      "git",
+      ["-C", repoPath, "checkout", "--track", `origin/${branchName}`],
+      { env }
+    );
+    console.log(`Branch "${branchName}" fetched from remote and checked out`);
+    return false;
+  } catch {
+    // not on remote either — fall through
+  }
+
+  // 3. Create a fresh branch
   await execFileAsync("git", ["-C", repoPath, "checkout", "-b", branchName], { env });
   console.log(`Branch "${branchName}" created locally`);
+  return true;
 }
 
 /**

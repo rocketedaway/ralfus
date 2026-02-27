@@ -72,27 +72,35 @@ export async function runImplementationJob(
     return;
   }
 
-  console.log(`[implementationJob] Found ${steps.length} step(s) to implement: ${steps.map((s) => `Step ${s.stepNumber}`).join(", ")}`);
+  const isResuming = currentCommentBody.includes("- [x] Step ");
+  console.log(`[implementationJob] Found ${steps.length} unchecked step(s) to implement: ${steps.map((s) => `Step ${s.stepNumber}`).join(", ")}${isResuming ? " (resuming)" : ""}`);
 
   // 3. Ensure repo is checked out
   console.log(`[implementationJob] Ensuring repo is checked out for issue ${issueId}`);
   const repoPath = await ensureRepoCheckedOut(issueId);
   console.log(`[implementationJob] Repo ready at ${repoPath}`);
 
-  // 4. Create the feature branch
+  // 4. Switch to (or create) the feature branch
   const branchName = `ralfus/${issue.identifier.toLowerCase()}`;
-  console.log(`[implementationJob] Creating branch "${branchName}"`);
-  await createBranch(repoPath, branchName);
-  console.log(`[implementationJob] Branch "${branchName}" created (will be pushed with first commit)`);
+  console.log(`[implementationJob] Checking out branch "${branchName}"`);
+  const branchWasCreated = await createBranch(repoPath, branchName);
 
-  // 5. Transition Linear ticket to In Progress and announce the branch
+  // 5. Transition Linear ticket to In Progress and announce
   await updateIssueStatus(linear, issueId, orgId, "In Progress");
   const branchUrl = `${getRepoWebUrl()}/tree/${branchName}`;
-  await postAgentActivity(
-    linear,
-    agentSessionId,
-    `🌵 Fresh branch planted: [${branchName}](${branchUrl}) — dropping in and shredding code now! 🏄`
-  );
+  if (branchWasCreated) {
+    await postAgentActivity(
+      linear,
+      agentSessionId,
+      `🌵 Fresh branch planted: [${branchName}](${branchUrl}) — dropping in and shredding code now! 🏄`
+    );
+  } else {
+    await postAgentActivity(
+      linear,
+      agentSessionId,
+      `🌵 Paddling back out on [${branchName}](${branchUrl}) — resuming from Step ${steps[0].stepNumber}. Cowabunga! 🏄`
+    );
+  }
 
   // 6. Implement each step, committing after each one
   for (let i = 0; i < steps.length; i++) {
