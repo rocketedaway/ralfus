@@ -59,6 +59,7 @@ fly secrets set \
   LINEAR_WEBHOOK_SECRET=your_webhook_secret \
   GITHUB_TOKEN=your_github_pat \
   GITHUB_REPO_URL=https://github.com/your-org/your-repo \
+  GITHUB_WEBHOOK_SECRET=your_github_webhook_secret \
   CURSOR_API_KEY=your_cursor_api_key
 ```
 
@@ -68,6 +69,7 @@ fly secrets set \
 | `LINEAR_WEBHOOK_SECRET` | Linear OAuth app settings |
 | `GITHUB_TOKEN` | [github.com/settings/tokens](https://github.com/settings/tokens) — classic token with `repo` scope |
 | `GITHUB_REPO_URL` | HTTPS URL of the repo to work in, e.g. `https://github.com/org/repo` |
+| `GITHUB_WEBHOOK_SECRET` | A secret you generate and enter when creating the GitHub webhook — see [docs/github-webhook-setup.md](github-webhook-setup.md) |
 | `CURSOR_API_KEY` | Cursor account settings |
 
 Confirm they were saved:
