@@ -73,7 +73,15 @@ function planTextToCheckboxes(planText: string): string {
   // Strip any clarifying questions section if present
   const planOnly = planText.split(/^##\s+Clarif/im)[0].trim();
 
-  return planOnly
+  // Remove any "## Implementation Plan" headings Cursor may include in its output
+  // to avoid duplicating the heading added by the caller.
+  const withoutHeader = planOnly
+    .split("\n")
+    .filter((line) => !/^#{1,6}\s+Implementation\s+Plan\s*$/i.test(line))
+    .join("\n")
+    .trim();
+
+  return withoutHeader
     .split("\n")
     .map((line) => {
       // Match bare "1. Title", "### 1. Title", or "### 1\. Title" (escaped dot) forms
