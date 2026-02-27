@@ -122,20 +122,61 @@ export async function commitAndPush(repoPath: string, message: string): Promise<
 }
 
 /**
- * Creates a pull request using the GitHub CLI and returns the PR URL.
+ * Creates a pull request using the GitHub REST API and returns the PR URL.
  */
 export async function createPullRequest(
   repoPath: string,
   title: string,
   body: string
 ): Promise<string> {
-  const env = getGhEnv();
-  const { stdout } = await execFileAsync(
-    "gh",
-    ["pr", "create", "--title", title, "--body", body],
-    { cwd: repoPath, env }
+  const token = getGithubToken();
+
+  // Resolve the current branch name
+  const { stdout: branchOut } = await execFileAsync(
+    "git",
+    ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"],
+    { env: process.env }
   );
-  const prUrl = stdout.trim();
+  const head = branchOut.trim();
+
+  // Resolve the default branch (base) from the remote
+  const { stdout: defaultBranchOut } = await execFileAsync(
+    "git",
+    ["-C", repoPath, "remote", "show", "origin"],
+    { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }
+  );
+  const baseMatch = defaultBranchOut.match(/HEAD branch:\s*(\S+)/);
+  const base = baseMatch ? baseMatch[1] : "main";
+
+  // Extract owner/repo from the remote URL
+  const { stdout: remoteUrlOut } = await execFileAsync(
+    "git",
+    ["-C", repoPath, "remote", "get-url", "origin"],
+    { env: process.env }
+  );
+  const remoteUrl = remoteUrlOut.trim();
+  const repoMatch = remoteUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+  if (!repoMatch) throw new Error(`Cannot parse GitHub owner/repo from remote URL: ${remoteUrl}`);
+  const [, owner, repo] = repoMatch;
+
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({ title, body, head, base }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`GitHub API error creating PR (${response.status}): ${text}`);
+  }
+
+  const data = (await response.json()) as { html_url: string };
+  const prUrl = data.html_url;
   console.log(`Pull request created: ${prUrl}`);
   return prUrl;
 }
